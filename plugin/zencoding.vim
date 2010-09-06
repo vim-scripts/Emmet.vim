@@ -1,8 +1,8 @@
 "=============================================================================
 " File: zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 11-Jun-2010.
-" Version: 0.43
+" Last Change: 06-Sep-2010.
+" Version: 0.44
 " WebPage: http://github.com/mattn/zencoding-vim
 " Description: vim plugins for HTML and CSS hi-speed coding.
 " SeeAlso: http://code.google.com/p/zen-coding/
@@ -10,7 +10,7 @@
 "
 "   This is vim script support expanding abbreviation like zen-coding.
 "   ref: http://code.google.com/p/zen-coding/
-"   
+"
 "   Type abbreviation
 "      +-------------------------------------
 "      | html:5_
@@ -42,12 +42,12 @@
 "      |    <div class="bar"></div>
 "      |</div>
 "      +-------------------------------------
-"   
+"
 " Tips:
-"   
+"
 "   You can customize behavior of expanding with overriding config.
-"   This configuration will be marged at loading plugin. 
-"   
+"   This configuration will be marged at loading plugin.
+"
 "     let g:user_zen_settings = {
 "     \  'indentation' : '  ',
 "     \  'perl' : {
@@ -109,14 +109,14 @@ for s:item in [
 \ {'mode': 'i', 'var': 'user_zen_anchorizesummary_key', 'key': 'A', 'plug': 'ZenCodingAnchorizeSummary', 'func': '<esc>:call <sid>zen_anchorizeURL(1)<cr>a'},
 \ {'mode': 'n', 'var': 'user_zen_anchorizesummary_key', 'key': 'A', 'plug': 'ZenCodingAnchorizeSummary', 'func': ':call <sid>zen_anchorizeURL(1)<cr>'},
 \]
-   
+
   if !hasmapto('<plug>'.s:item.plug, s:item.mode)
     exe s:item.mode . 'noremap <plug>' . s:item.plug . ' ' . s:item.func
   endif
   if !exists('g:' . s:item.var)
     exe 'let g:' . s:item.var . " = '" . g:user_zen_leader_key . s:item.key . "'"
   endif
-  if !hasmapto(eval('g:' . s:item.var), s:item.mode)
+  if len(maparg(eval('g:' . s:item.var), s:item.mode)) == 0
     exe s:item.mode . 'map ' . s:target . ' ' . eval('g:' . s:item.var) . ' <plug>' . s:item.plug
   endif
 endfor
@@ -699,6 +699,7 @@ let s:zen_settings = {
 \            'form': {'action': ''},
 \            'form:get': {'action': '', 'method': 'get'},
 \            'form:post': {'action': '', 'method': 'post'},
+\            'form:upload': {'action': '', 'method': 'post', 'enctype': 'multipart/form-data'},
 \            'label': {'for': ''},
 \            'input': {'type': ''},
 \            'input:hidden': [{'type': 'hidden'}, {'name': ''}],
@@ -741,7 +742,7 @@ let s:zen_settings = {
 \            'menu:t': {'type': 'toolbar'},
 \            'video': {'src': ''},
 \            'audio': {'src': ''},
-\            'html:xml': [{'xmlns': 'http://www.w3.org/1999/xhtml'}, {'xml:lang': 'ru'}]
+\            'html:xml': [{'xmlns': 'http://www.w3.org/1999/xhtml'}, {'xml:lang': '${lang}'}]
 \        },
 \        'aliases': {
 \            'link:*': 'link',
@@ -845,6 +846,9 @@ let s:zen_settings = {
 \    },
 \    'xhtml': {
 \        'extends': 'html'
+\    },
+\    'mustache': {
+\        'extends': 'html'
 \    }
 \}
 
@@ -904,7 +908,7 @@ function! s:zen_parseIntoTree(abbr, type)
   endif
 
   let abbr = substitute(abbr, '\([a-zA-Z][a-zA-Z0-9]*\)+\([()]\|$\)', '\="(".s:zen_expandos(type, submatch(1)).")".submatch(2)', 'i')
-  let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\-]*\|{[^}]\+}\)\(\%(\%(#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
+  let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\-]*\|{[^}]\+}\)\(\%(\%(#[{}a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.[{}a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
   let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0 }
   let parent = root
   let last = root
@@ -979,7 +983,7 @@ function! s:zen_parseIntoTree(abbr, type)
     if len(attributes)
       let attr = attributes
       while len(attr)
-        let item = matchstr(attr, '\(\%(\%(#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.[a-zA-Z0-9_\-\$]\+\)*\)\)')
+        let item = matchstr(attr, '\(\%(\%(#[{}a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.[{}a-zA-Z0-9_\-\$]\+\)*\)\)')
         if len(item) == 0
           break
         endif
@@ -1369,16 +1373,16 @@ function! s:zen_getFileType()
   let type = &ft
   if type == 'xslt' | let type = 'xsl' | endif
   if synIDattr(synID(line("."), col("."), 1), "name") =~ '^css'
-    let type = 'css'    
+    let type = 'css'
   endif
   if synIDattr(synID(line("."), col("."), 1), "name") =~ '^html'
-    let type = 'html'    
+    let type = 'html'
   endif
   if synIDattr(synID(line("."), col("."), 1), "name") =~ '^xml'
-    let type = 'xml'    
+    let type = 'xml'
   endif
   if synIDattr(synID(line("."), col("."), 1), "name") =~ '^javaScript'
-    let type = 'javascript'    
+    let type = 'javascript'
   endif
   if len(type) == 0 | let type = 'html' | endif
   return type
@@ -1420,7 +1424,7 @@ function! s:zen_expandAbbr(mode) range
         let expand = substitute(expand, '\$line\$', lpart, '')
       endfor
     else
-      let str = '' 
+      let str = ''
       if a:firstline != a:lastline
         let line = getline(a:firstline)
         let part = substitute(line, '^\s*', '', '')
@@ -1433,13 +1437,16 @@ function! s:zen_expandAbbr(mode) range
           endif
         endfor
         if len(leader)
-          let items = s:zen_parseIntoTree(leader . "{\n" . str . "}", type).child
+          let items = s:zen_parseIntoTree(leader, type).child
+          let items[0].value = "{\n".str."}"
         else
-          let items = s:zen_parseIntoTree(leader . "{" . str . "}", type).child
+          let items = s:zen_parseIntoTree(leader, type).child
+          let items[0].value = "{".str."}"
         endif
       else
         let str .= getline(a:firstline)
-        let items = s:zen_parseIntoTree(leader . "{" . str . "}", type).child
+        let items = s:zen_parseIntoTree(leader, type).child
+        let items[0].value = "{".str."}"
       endif
       for item in items
         let expand .= s:zen_toString(item, type, 0, filters)
@@ -1473,7 +1480,7 @@ function! s:zen_expandAbbr(mode) range
   endif
   if len(expand)
     if expand !~ '\${cursor}'
-      if a:mode == 2 | 
+      if a:mode == 2 |
         let expand = '${cursor}' . expand
       else
         let expand .= '${cursor}'
@@ -1554,7 +1561,7 @@ function! s:zen_imageSize()
     let fn = simplify(expand('%:h') . '/' . fn)
   endif
   let [type, width, height] = ['', -1, -1]
-  
+
   if filereadable(fn)
     let hex = substitute(system('xxd -p "'.fn.'"'), '\n', '', 'g')
   else
@@ -1612,7 +1619,7 @@ function! s:zen_toggleComment()
     let block = [pos1, [pos1[0], pos1[1] + len(content) - 1]]
     if content[-2:] == '/>' && s:point_in_region(curpos[1:2], block)
       let comment_region = s:search_region('<!--', '-->')
-      if !s:region_is_valid(comment_region) || !s:point_in_region(curpos[1:2], comment_region)
+      if !s:region_is_valid(comment_region) || !s:point_in_region(curpos[1:2], comment_region) || !(s:point_in_region(comment_region[0], block) && s:point_in_region(comment_region[1], block))
         let content = '<!-- ' . s:get_content(block) . ' -->'
         call s:change_content(block, content)
       else
@@ -1630,15 +1637,22 @@ function! s:zen_toggleComment()
         let pos2 = searchpos('</' . tag_name . '>', 'cneW')
       endif
       let block = [pos1, pos2]
+      if !s:region_is_valid(block)
+        call setpos('.', curpos)
+        let block = s:search_region('<!', '-->')
+        if !s:region_is_valid(block)
+          return
+        endif
+      endif
       if s:point_in_region(curpos[1:2], block)
         let comment_region = s:search_region('<!--', '-->')
-        if !s:region_is_valid(comment_region) || !s:point_in_region(curpos[1:2], comment_region)
+        if !s:region_is_valid(comment_region) || !s:point_in_region(curpos[1:2], comment_region) || !(s:point_in_region(comment_region[0], block) && s:point_in_region(comment_region[1], block))
           let content = '<!-- ' . s:get_content(block) . ' -->'
           call s:change_content(block, content)
         else
-          let content = s:get_content(block)
+          let content = s:get_content(comment_region)
           let content = substitute(content, '^<!--\s\(.*\)\s-->$', '\1', '')
-          call s:change_content(block, content)
+          call s:change_content(comment_region, content)
         endif
         return
       else
@@ -2091,7 +2105,7 @@ function! s:region_is_valid(region)
   return 1
 endfunction
 
-" search_region : make region from pattern which is composing start/end 
+" search_region : make region from pattern which is composing start/end
 "   this function return array of position
 function! s:search_region(start, end)
   return [searchpos(a:start, 'bcnW'), searchpos(a:end, 'cneW')]
