@@ -1,8 +1,8 @@
 "=============================================================================
 " File: zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 10-Nov-2010.
-" Version: 0.48
+" Last Change: 18-Nov-2010.
+" Version: 0.49
 " WebPage: http://github.com/mattn/zencoding-vim
 " Description: vim plugins for HTML and CSS hi-speed coding.
 " SeeAlso: http://code.google.com/p/zen-coding/
@@ -79,7 +79,7 @@ if !exists('g:zencoding_debug')
 endif
 
 if exists('g:use_zen_complete_tag') && g:use_zen_complete_tag
-  setlocal completefunc=zencoding#CompleteTag
+  setlocal omnifunc=zencoding#CompleteTag
 endif
 
 if !exists('g:user_zen_leader_key')
