@@ -1,7 +1,7 @@
 "=============================================================================
 " zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 22-Nov-2010.
+" Last Change: 06-Jan-2011.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -61,8 +61,12 @@ function! s:zen_parseIntoTree(abbr, type)
     let indent = s:zen_settings.indentation
   endif
 
-  let abbr = substitute(abbr, '\([a-zA-Z][a-zA-Z0-9]*\)+\([()]\|$\)', '\="(".s:zen_getExpandos(type, submatch(1)).")".submatch(2)', 'i')
-  let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\-]*\|{[^}]\+}\)\(\%(\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
+  if s:zen_isExtends(type, "html")
+    let abbr = substitute(abbr, '\([a-zA-Z][a-zA-Z0-9]*\)+\([()]\|$\)', '\="(".s:zen_getExpandos(type, submatch(1)).")".submatch(2)', 'i')
+    let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\-]*\|{[^}]\+}\)\(\%(\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
+  else
+    let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\+\-]*\|{[^}]\+}\)\(\%(\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
+  endif
   let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0 }
   let parent = root
   let last = root
@@ -82,6 +86,10 @@ function! s:zen_parseIntoTree(abbr, type)
       break
     endif
     if tag_name =~ '^#'
+      let attributes = tag_name . attributes
+      let tag_name = 'div'
+    endif
+    if tag_name =~ '^\.'
       let attributes = tag_name . attributes
       let tag_name = 'div'
     endif
@@ -327,8 +335,8 @@ function! s:zen_toString_haml(settings, current, type, inline, filters, itemno, 
     for attr in keys(current.attr)
       let val = current.attr[attr]
       if current.multiplier > 1
-        while val =~ '\$[^{]*'
-          let val = substitute(val, '\(\$\+\)\([^{]*\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        while val =~ '\$\([^{]\|$\)'
+          let val = substitute(val, '\(\$\+\)\([^{]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
         endwhile
       endif
       if attr == 'id'
@@ -676,9 +684,6 @@ function! zencoding#expandAbbr(mode) range
     else
       let part = matchstr(line, '\(\S.*\)$')
     endif
-    if part =~ '!'
-      let part = substitute(part, '.*!', '!', '')
-    endif
     let rest = getline('.')[len(line):]
     let str = part
     let mx = '|\(\%(html\|haml\|e\|c\|fc\|xsl\)\s*,\{0,1}\s*\)*$'
@@ -728,6 +733,9 @@ function! zencoding#expandAbbr(mode) range
     let &selection = 'inclusive'
     silent! exe "normal! v7h\"_s"
     let &selection = oldselection
+  endif
+  if g:zencoding_debug > 1
+    call getchar()
   endif
 endfunction
 
