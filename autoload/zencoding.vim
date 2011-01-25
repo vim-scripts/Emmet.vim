@@ -1,7 +1,7 @@
 "=============================================================================
 " zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 14-Jan-2011.
+" Last Change: 25-Jan-2011.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -353,8 +353,6 @@ function! s:zen_toString_haml(settings, current, type, inline, filters, itemno, 
     endif
     if stridx(','.settings.html.empty_elements.',', ','.current.name.',') != -1 && len(current.value) == 0
       let str .= "/"
-    elseif stridx(','.settings.html.block_elements.',', ','.current.name.',') != -1 && (len(current.child) == 0 && len(current.value) == 0)
-      let str .= '<'
     endif
 
     let inner = ''
@@ -786,8 +784,8 @@ function! zencoding#imageSize()
   endif
   if hex =~ '^47494638'
     let type = 'gif'
-    let width = eval('0x'.hex[18:19].hex[16:17])
-    let height = eval('0x'.hex[14:15].hex[12:13])
+    let width = eval('0x'.hex[14:15].hex[12:13])
+    let height = eval('0x'.hex[18:19].hex[16:17])
   endif
 
   if width == -1 && height == -1
