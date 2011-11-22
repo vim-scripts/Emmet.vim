@@ -1,7 +1,7 @@
 "=============================================================================
 " zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 08-Nov-2011.
+" Last Change: 22-Nov-2011.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -62,7 +62,13 @@ function! s:zen_parseIntoTree(abbr, type)
   endif
 
   if s:zen_isExtends(type, "html")
-    let abbr = substitute(abbr, '\([a-zA-Z][a-zA-Z0-9]*\)+\([()]\|$\)', '\="(".s:zen_getExpandos(type, submatch(1)).")".submatch(2)', 'i')
+    " try 'foo' to (foo-x)
+    let rabbr = s:zen_getExpandos(type, abbr)
+    if rabbr == abbr
+      " try 'foo+(' to (foo-x)
+      let rabbr = substitute(abbr, '\([a-zA-Z][a-zA-Z0-9+]*\)+\([()]\|$\)', '\="(".s:zen_getExpandos(type, submatch(1)).")".submatch(2)', 'i')
+    endif
+    let abbr = rabbr
     let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\-]*\|{[^}]\+}\)\(\%(\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
   else
     let mx = '\([+>]\|<\+\)\{-}\s*\((*\)\{-}\s*\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:\!\+\-]*\|{[^}]\+}\)\(\%(\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)\|\%(\[[^\]]\+\]\)\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)\)*\)\%(\({[^}]\+}\)\)\{0,1}\%(\s*\*\s*\([0-9]\+\)\s*\)\{0,1}\(\%(\s*)\%(\s*\*\s*[0-9]\+\s*\)\{0,1}\)*\)'
@@ -540,7 +546,6 @@ function! s:zen_toString(...)
       if len(snippet) > 0
         let tmp = substitute(snippet, '|', '${cursor}', 'g')
         let tmp = substitute(tmp, '\${zenname}', current.name, 'g')
-        echo type
         if type == 'css' && s:zen_useFilter(filters, 'fc')
           let tmp = substitute(tmp, '^\([^:]\+\):\(.*\)$', '\1: \2', '')
         endif
@@ -706,11 +711,11 @@ function! zencoding#expandAbbr(mode) range
     else
       let part = matchstr(line, '\(\S.*\)$')
       if s:zen_isExtends(type, "html")
-        while part =~ '<.*>'
+        while part =~ '<.\{-}>'
           let part = substitute(part, '^.*<.\{-}>', '', '')
         endwhile
       elseif s:zen_isExtends(type, "css")
-        let part = substitute(part, '^.*;\s', '', '')
+        let part = substitute(part, '^.*[;{]\s*', '', '')
       endif
     endif
     let rest = getline('.')[len(line):]
