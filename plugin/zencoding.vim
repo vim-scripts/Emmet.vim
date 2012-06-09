@@ -1,8 +1,8 @@
 "=============================================================================
 " File: zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 29-May-2012.
-" Version: 0.72
+" Last Change: 10-Jun-2012.
+" Version: 0.73
 " WebPage: http://github.com/mattn/zencoding-vim
 " Description: vim plugins for HTML and CSS hi-speed coding.
 " SeeAlso: http://code.google.com/p/zen-coding/
@@ -92,11 +92,11 @@ endif
 
 function! s:install_plugin()
   for item in [
-  \ {'mode': 'i', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandAbbr', 'func': '<c-g>u<esc>:call zencoding#expandAbbr(0)<cr>a'},
-  \ {'mode': 'v', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandVisual', 'func': ':call zencoding#expandAbbr(2)<cr>'},
-  \ {'mode': 'n', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandNormal', 'func': ':call zencoding#expandAbbr(3)<cr>'},
-  \ {'mode': 'i', 'var': 'user_zen_expandword_key', 'key': ';', 'plug': 'ZenCodingExpandWord', 'func': '<c-g>u<esc>:call zencoding#expandAbbr(1)<cr>a'},
-  \ {'mode': 'n', 'var': 'user_zen_expandword_key', 'key': ',', 'plug': 'ZenCodingExpandWord', 'func': ':call zencoding#expandAbbr(1)<cr>'},
+  \ {'mode': 'i', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandAbbr', 'func': '<c-g>u<esc>:call zencoding#expandAbbr(0,"")<cr>a'},
+  \ {'mode': 'v', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandVisual', 'func': ':call zencoding#expandAbbr(2,"")<cr>'},
+  \ {'mode': 'n', 'var': 'user_zen_expandabbr_key', 'key': ',', 'plug': 'ZenCodingExpandNormal', 'func': ':call zencoding#expandAbbr(3,"")<cr>'},
+  \ {'mode': 'i', 'var': 'user_zen_expandword_key', 'key': ';', 'plug': 'ZenCodingExpandWord', 'func': '<c-g>u<esc>:call zencoding#expandAbbr(1,"")<cr>a'},
+  \ {'mode': 'n', 'var': 'user_zen_expandword_key', 'key': ',', 'plug': 'ZenCodingExpandWord', 'func': ':call zencoding#expandAbbr(1,"")<cr>'},
   \ {'mode': 'i', 'var': 'user_zen_balancetaginward_key', 'key': 'd', 'plug': 'ZenCodingBalanceTagInwardInsert', 'func': '<esc>:call zencoding#balanceTag(1)<cr>'},
   \ {'mode': 'n', 'var': 'user_zen_balancetaginward_key', 'key': 'd', 'plug': 'ZenCodingBalanceTagInwardNormal', 'func': ':call zencoding#balanceTag(1)<cr>'},
   \ {'mode': 'v', 'var': 'user_zen_balancetaginward_key', 'key': 'd', 'plug': 'ZenCodingBalanceTagInwardVisual', 'func': ':call zencoding#balanceTag(2)<cr>'},
@@ -112,7 +112,7 @@ function! s:install_plugin()
   \ {'mode': 'i', 'var': 'user_zen_togglecomment_key', 'key': '/', 'plug': 'ZenCodingToggleComment', 'func': '<esc>:call zencoding#toggleComment()<cr>a'},
   \ {'mode': 'n', 'var': 'user_zen_togglecomment_key', 'key': '/', 'plug': 'ZenCodingToggleComment', 'func': ':call zencoding#toggleComment()<cr>'},
   \ {'mode': 'v', 'var': 'user_zen_mergelines_key', 'key': 'm', 'plug': 'ZenCodingMergeLines', 'func': ':call zencoding#mergeLines()<cr>'},
-  \ {'mode': 'i', 'var': 'user_zen_splitjointag_key', 'key': 'j', 'plug': 'ZenCodingSplitJoinTagInsert', 'func': '<esc>:call zencoding#splitJoinTag()<cr>a'},
+  \ {'mode': 'i', 'var': 'user_zen_splitjointag_key', 'key': 'j', 'plug': 'ZenCodingSplitJoinTagInsert', 'func': '<esc>:call zencoding#splitJoinTag()<cr>'},
   \ {'mode': 'n', 'var': 'user_zen_splitjointag_key', 'key': 'j', 'plug': 'ZenCodingSplitJoinTagNormal', 'func': ':call zencoding#splitJoinTag()<cr>'},
   \ {'mode': 'i', 'var': 'user_zen_removetag_key', 'key': 'k', 'plug': 'ZenCodingRemoveTag', 'func': '<esc>:call zencoding#removeTag()<cr>a'},
   \ {'mode': 'n', 'var': 'user_zen_removetag_key', 'key': 'k', 'plug': 'ZenCodingRemoveTag', 'func': ':call zencoding#removeTag()<cr>'},
@@ -120,6 +120,7 @@ function! s:install_plugin()
   \ {'mode': 'n', 'var': 'user_zen_anchorizeurl_key', 'key': 'a', 'plug': 'ZenCodingAnchorizeURL', 'func': ':call zencoding#anchorizeURL(0)<cr>'},
   \ {'mode': 'i', 'var': 'user_zen_anchorizesummary_key', 'key': 'A', 'plug': 'ZenCodingAnchorizeSummary', 'func': '<esc>:call zencoding#anchorizeURL(1)<cr>a'},
   \ {'mode': 'n', 'var': 'user_zen_anchorizesummary_key', 'key': 'A', 'plug': 'ZenCodingAnchorizeSummary', 'func': ':call zencoding#anchorizeURL(1)<cr>'},
+  \ {'mode': 'v', 'var': 'user_zen_codepretty_key', 'key': 'c', 'plug': 'ZenCodingCodePretty', 'func': ':call zencoding#codePretty()<cr>'},
   \]
 
     if !hasmapto('<plug>'.item.plug, item.mode)
@@ -139,6 +140,8 @@ function! s:install_plugin()
 endfunction
 call s:install_plugin()
 delfunction s:install_plugin
+
+command! -nargs=1 Zen call zencoding#expandAbbr(4, <q-args>)
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
