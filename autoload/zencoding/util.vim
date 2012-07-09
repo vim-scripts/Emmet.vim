@@ -144,16 +144,12 @@ endfunction
 "==============================================================================
 " html utils
 "==============================================================================
-function! zencoding#util#getContentFromURL(url, utf8)
-  silent! new
-  if a:utf8
-    silent! exec '0r ++enc=utf8 !'.g:zencoding_curl_command.' "'.substitute(a:url, '#.*', '', '').'"'
-  else
-    silent! exec '0r!'.g:zencoding_curl_command.' "'.substitute(a:url, '#.*', '', '').'"'
-  endif
-  let ret = join(getline(1, '$'), "\n")
-  silent! bw!
-  return ret
+function! zencoding#util#getContentFromURL(url)
+  let res = system(printf("%s %s", g:zencoding_curl_command, shellescape(substitute(a:url, '#.*', '', ''))))
+  let s1 = len(split(res, '?'))
+  let utf8 = iconv(res, 'utf-8', &encoding)
+  let s2 = len(split(utf8, '?'))
+  return s2 > s1 * 2 ? utf8 : res
 endfunction
 
 function! zencoding#util#getTextFromHTML(buf)
@@ -201,20 +197,32 @@ function! zencoding#util#getImageSize(fn)
     let hex = substitute(system(g:zencoding_curl_command.' "'.fn.'" | xxd -p'), '\n', '', 'g')
   endif
 
-  let [type, width, height] = ['', -1, -1]
+  let [width, height] = [-1, -1]
   if hex =~ '^89504e470d0a1a0a'
-    let type = 'png'
     let width = eval('0x'.hex[32:39])
     let height = eval('0x'.hex[40:47])
   endif
   if hex =~ '^ffd8'
-    let pos = match(hex, 'ffc[02]')
-    let type = 'jpg'
-    let height = eval('0x'.hex[pos+10:pos+11])*256 + eval('0x'.hex[pos+12:pos+13])
-    let width = eval('0x'.hex[pos+14:pos+15])*256 + eval('0x'.hex[pos+16:pos+17])
+    let pos = 4
+    while pos < len(hex)
+      let bs = hex[pos+0:pos+3]
+      let pos += 4
+      if bs == 'ffc0'
+        let pos += 6
+        let height = eval('0x'.hex[pos+0:pos+1])*256 + eval('0x'.hex[pos+2:pos+3])
+        let pos += 4
+        let width = eval('0x'.hex[pos+0:pos+1])*256 + eval('0x'.hex[pos+2:pos+3])
+        break
+      elseif bs =~ 'ffd[9a]'
+        break
+      elseif bs =~ 'ff\(e[0-9a-d]\|fe\|db\|dd\|c4\)'
+        let pos += (eval('0x'.hex[pos+0:pos+1])*256 + eval('0x'.hex[pos+2:pos+3])) * 2
+      else
+        let pos += 4
+      endif
+    endwhile
   endif
   if hex =~ '^47494638'
-    let type = 'gif'
     let width = eval('0x'.hex[14:15].hex[12:13])
     let height = eval('0x'.hex[18:19].hex[16:17])
   endif

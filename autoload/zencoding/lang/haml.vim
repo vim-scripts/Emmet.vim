@@ -14,27 +14,34 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
   let filters = a:filters
   let itemno = a:itemno
   let indent = a:indent
+  let dollar_expr = zencoding#getResource(type, 'dollar_expr', 1)
   let str = ""
 
   let comment_indent = ''
   let comment = ''
   let current_name = current.name
-  let current_name = substitute(current.name, '\$$', itemno+1, '')
+  if dollar_expr
+    let current_name = substitute(current.name, '\$$', itemno+1, '')
+  endif
   if len(current.name) > 0
     let str .= '%' . current_name
     let tmp = ''
     for attr in keys(current.attr)
       let val = current.attr[attr]
-      while val =~ '\$\([^#{]\|$\)'
-        let val = substitute(val, '\(\$\+\)\([^{]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
-      endwhile
-      let attr = substitute(attr, '\$$', itemno+1, '')
-      if attr == 'id'
+      if dollar_expr
+        while val =~ '\$\([^#{]\|$\)'
+          let val = substitute(val, '\(\$\+\)\([^{]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        endwhile
+        let attr = substitute(attr, '\$$', itemno+1, '')
+      endif
+      let valtmp = substitute(val, '\${cursor}', '', '')
+      if attr == 'id' && len(valtmp) > 0
         let str .= '#' . val
-      elseif attr == 'class'
+      elseif attr == 'class' && len(valtmp) > 0
         let str .= '.' . substitute(val, ' ', '.', 'g')
       else
         if len(tmp) > 0 | let tmp .= ',' | endif
+        let val = substitute(val, '\${cursor}', '', '')
         let tmp .= ' :' . attr . ' => "' . val . '"'
       endif
     endfor
@@ -47,25 +54,50 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
 
     let inner = ''
     if len(current.value) > 0
-      let lines = split(current.value[1:-2], "\n")
-      let str .= " " . lines[0]
-      for line in lines[1:]
-        let str .= " |\n" . line
-      endfor
+      let text = current.value[1:-2]
+      if dollar_expr
+        let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        let text = substitute(text, '\${nr}', "\n", 'g')
+        let text = substitute(text, '\\\$', '$', 'g')
+      endif
+      let lines = split(text, "\n")
+      if len(lines) == 1
+        let str .= " " . text
+      else
+        for line in lines
+          let str .= "\n" . indent . line . " |"
+        endfor
+      endif
     endif
     if len(current.child) == 1 && len(current.child[0].name) == 0
-      let lines = split(current.child[0].value[1:-2], "\n")
-      let str .= " " . lines[0]
-      for line in lines[1:]
-        let str .= " |\n" . line
-      endfor
+      let text = current.child[0].value[1:-2]
+      if dollar_expr
+        let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        let text = substitute(text, '\${nr}', "\n", 'g')
+        let text = substitute(text, '\\\$', '$', 'g')
+      endif
+      let lines = split(text, "\n")
+      if len(lines) == 1
+        let str .= " " . text
+      else
+        for line in lines
+          let str .= "\n" . indent . line . " |"
+        endfor
+      endif
     elseif len(current.child) > 0
       for child in current.child
-        let inner .= zencoding#toString(child, type, inline, filters)
+        let inner .= zencoding#toString(child, type, inline, filters, itemno)
       endfor
-      let inner = substitute(inner, "\n", "\n  ", 'g')
-      let inner = substitute(inner, "\n  $", "", 'g')
-      let str .= "\n  " . inner
+      let inner = substitute(inner, "\n", "\n" . indent, 'g')
+      let inner = substitute(inner, "\n" . indent . "$", "", 'g')
+      let str .= "\n" . indent . inner
+    endif
+  else
+    let str = current.value[1:-2]
+    if dollar_expr
+      let str = substitute(str, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      let str = substitute(str, '\${nr}', "\n", 'g')
+      let str = substitute(str, '\\\$', '$', 'g')
     endif
   endif
   let str .= "\n"
@@ -79,7 +111,9 @@ function! zencoding#lang#haml#imageSize()
     return
   endif
   let fn = current.attr.src
-  if fn !~ '^\(/\|http\)'
+  if fn =~ '^\s*$'
+    return
+  elseif fn !~ '^\(/\|http\)'
     let fn = simplify(expand('%:h') . '/' . fn)
   endif
 
@@ -91,6 +125,9 @@ function! zencoding#lang#haml#imageSize()
   let current.attr.height = height
   let haml = zencoding#toString(current, 'haml', 1)
   call setline('.', substitute(matchstr(line, '^\s*') . haml, "\n", "", "g"))
+endfunction
+
+function! zencoding#lang#haml#encodeImage()
 endfunction
 
 function! zencoding#lang#haml#parseTag(tag)
