@@ -1,4 +1,4 @@
-let s:mx = '\([+>]\|<\+\)\{-}\s*'
+let s:mx = '\([+>]\|[<^]\+\)\{-}\s*'
 \     .'\((*\)\{-}\s*'
 \       .'\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:_\!\-$]*\|{\%([^$}]\+\|\$#\|\${\w\+}\|\$\+\)*}[ \t\r\n}]*\)'
 \       .'\('
@@ -16,7 +16,7 @@ function! zencoding#lang#html#findTokens(str)
   let str = a:str
   let [pos, last_pos] = [0, 0]
   while 1
-    let tag = matchstr(str, '<.\{-}>', pos)
+    let tag = matchstr(str, '<[a-zA-Z].\{-}>', pos)
     if len(tag) == 0
       break
     endif
@@ -113,7 +113,7 @@ function! zencoding#lang#html#parseIntoTree(abbr, type)
         let snippet = substitute(snippet, '|', '${cursor}', 'g')
       endif
       let lines = split(snippet, "\n")
-      call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", indent, "g")')
+      call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
       let current.snippet = join(lines, "\n")
       let current.name = ''
     endif
@@ -213,7 +213,7 @@ function! zencoding#lang#html#parseIntoTree(abbr, type)
       let current.parent = parent
       let current.pos = 1
     endif
-    if operator =~ '<'
+    if operator =~ '[<^]'
       for c in range(len(operator))
         let tmp = parent.parent
         if empty(tmp)
@@ -247,7 +247,7 @@ function! zencoding#lang#html#parseIntoTree(abbr, type)
               endif
               let parent = tmp
             endfor
-            if operator =~ '>'
+            if len(pos) > 0
               call remove(pos, -1)
             endif
             let last = parent
@@ -335,7 +335,7 @@ function! zencoding#lang#html#toString(settings, current, type, inline, filters,
     let str = "<!-- " . comment . " -->\n" . str
   endif
   if stridx(','.settings.html.empty_elements.',', ','.current_name.',') != -1
-    let str .= " />"
+    let str .= settings.html.empty_element_suffix
   else
     let str .= ">"
     let text = current.value[1:-2]
@@ -357,12 +357,16 @@ function! zencoding#lang#html#toString(settings, current, type, inline, filters,
           if nc > 1 || (len(child.name) > 0 && stridx(','.settings.html.inline_elements.',', ','.child.name.',') == -1)
             let str .= "\n" . indent
             let dr = 1
+          elseif current.multiplier == 1 && nc == 1 && len(child.name) == 0
+			  echo current.multiplier
+            let str .= "\n" . indent
+            let dr = 1
           endif
         endif
         let inner = zencoding#toString(child, type, 0, filters, itemno)
         let inner = substitute(inner, "^\n", "", 'g')
-        let inner = substitute(inner, "\n", "\n" . indent, 'g')
-        let inner = substitute(inner, "\n" . indent . '$', '', 'g')
+        let inner = substitute(inner, "\n", "\n" . escape(indent, '\'), 'g')
+        let inner = substitute(inner, "\n" . escape(indent, '\') . '$', '', 'g')
         let str .= inner
       endfor
     else

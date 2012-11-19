@@ -48,6 +48,8 @@ function! zencoding#lang#slim#toString(settings, current, type, inline, filters,
       for line in split(text, "\n")
         let str .= indent . "| " . line . "\n"
       endfor
+    elseif len(current.child) == 0
+      let str .= '${cursor}'
     endif
     if len(current.child) == 1 && len(current.child[0].name) == 0
       let str .= "\n"
@@ -64,8 +66,8 @@ function! zencoding#lang#slim#toString(settings, current, type, inline, filters,
       for child in current.child
         let inner .= zencoding#toString(child, type, inline, filters, itemno)
       endfor
-      let inner = substitute(inner, "\n", "\n" . indent, 'g')
-      let inner = substitute(inner, "\n" . indent . "$", "", 'g')
+      let inner = substitute(inner, "\n", "\n" . escape(indent, '\'), 'g')
+      let inner = substitute(inner, "\n" . escape(indent, '\') . "$", "", 'g')
       let str .= "\n" . indent . inner
     endif
   else

@@ -5,51 +5,122 @@ endfunction
 function! zencoding#lang#css#parseIntoTree(abbr, type)
   let abbr = a:abbr
   let type = a:type
+  let prefix = 0
+  let value = ''
 
   let settings = zencoding#getSettings()
   let indent = zencoding#getIndentation(type)
-
+  
   let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0 }
 
-  let tag_name = abbr
-  if tag_name =~ '.!$'
-    let tag_name = tag_name[:-2]
-    let important = 1
-  else
-    let important = 0
-  endif
-  " make default node
-  let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': important }
-  let current.name = tag_name
-
-  " aliases
-  let aliases = zencoding#getResource(type, 'aliases', {})
-  if has_key(aliases, tag_name)
-    let current.name = aliases[tag_name]
-  endif
-  let use_pipe_for_cursor = zencoding#getResource(type, 'use_pipe_for_cursor', 1)
-
-  " snippets
-  let snippets = zencoding#getResource(type, 'snippets', {})
-  if !empty(snippets) && has_key(snippets, tag_name)
-    let snippet = snippets[tag_name]
-    if use_pipe_for_cursor
-      let snippet = substitute(snippet, '|', '${cursor}', 'g')
+  " emmet
+  let tokens = split(abbr, '+\ze[^)!]')
+  for n in range(len(tokens))
+    let token = tokens[n]
+    let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+[pe]\{0,1}-\{0,1}\|-auto\)*\)$')
+    if len(prop)
+      let token = substitute(prop[1], '^(\(.*\))', '\1', '')
+      if token =~ '^-'
+        let prefix = 1
+        let token = token[1:]
+      endif
+      let value = ''
+      for v in split(prop[2], '\d\zs-')
+        if len(value) > 0
+          let value .= ' '
+        endif
+        if token =~ '^[z]'
+          " TODO
+          let value .= substitute(v, '[^0-9.]*$', '', '')
+        elseif v =~ 'p$'
+          let value .= substitute(v, 'p$', '%', '')
+        elseif v =~ 'e$'
+          let value .= substitute(v, 'e$', 'em', '')
+        elseif v =~ '\.'
+          let value .= v . 'em'
+        elseif v == 'auto'
+          let value .= v
+        else
+          let value .= v . 'px'
+        endif
+      endfor
     endif
-    let lines = split(snippet, "\n")
-    call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", indent, "g")')
-    let current.snippet = join(lines, "\n")
-    let current.name = ''
-  endif
-  let current.pos = 0
-  call add(root.child, current)
+  
+    let tag_name = token
+    if tag_name =~ '.!$'
+      let tag_name = tag_name[:-2]
+      let important = 1
+    else
+      let important = 0
+    endif
+    " make default node
+    let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': important }
+    let current.name = tag_name
+  
+    " aliases
+    let aliases = zencoding#getResource(type, 'aliases', {})
+    if has_key(aliases, tag_name)
+      let current.name = aliases[tag_name]
+    endif
+    let use_pipe_for_cursor = zencoding#getResource(type, 'use_pipe_for_cursor', 1)
+  
+    " snippets
+    let snippets = zencoding#getResource(type, 'snippets', {})
+    if !empty(snippets) && has_key(snippets, tag_name)
+      let snippet = snippets[tag_name]
+      if use_pipe_for_cursor
+        let snippet = substitute(snippet, '|', '${cursor}', 'g')
+      endif
+      let lines = split(snippet, "\n")
+      call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
+      let current.snippet = join(lines, "\n")
+      let current.name = ''
+      let current.snippet = substitute(current.snippet, ';', value . ';', '')
+      if use_pipe_for_cursor && len(value) > 0 && stridx(value, '${cursor}') == -1
+        let current.snippet = substitute(current.snippet, '${cursor}', '', 'g') . '${cursor}'
+      endif
+      if n < len(tokens) - 1
+        let current.snippet .= "\n"
+      endif
+    endif
+  
+    let current.pos = 0
+    let lg = matchlist(token, '^\%(linear-gradient\|lg\)(\s*\(\w\+\)\s*,\s*\([^,]\+\)\s*,\s*\([^)]\+\)\s*)$')
+    if len(lg)
+      let current.name = ''
+      let current.snippet = printf("background-image: -webkit-gradient(%s, 0 0, 0 100%, from(%s), to(%s));\n", lg[1], lg[2], lg[3])
+      call add(root.child, deepcopy(current))
+      let current.snippet = printf("background-image: -webkit-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      call add(root.child, deepcopy(current))
+      let current.snippet = printf("background-image: -moz-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      call add(root.child, deepcopy(current))
+      let current.snippet = printf("background-image: -o-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      call add(root.child, deepcopy(current))
+      let current.snippet = printf("background-image: linear-gradient(%s, %s);\n", lg[2], lg[3])
+      call add(root.child, deepcopy(current))
+    elseif prefix
+      let snippet = current.snippet
+      let current.snippet = '-webkit-' . snippet . "\n"
+      call add(root.child, deepcopy(current))
+      let current.snippet = '-moz-' . snippet . "\n"
+      call add(root.child, deepcopy(current))
+      let current.snippet = snippet
+      call add(root.child, current)
+    else
+      call add(root.child, current)
+    endif
+  endfor
   return root
 endfunction
 
 function! zencoding#lang#css#toString(settings, current, type, inline, filters, itemno, indent)
   let current = a:current
   let value = current.value[1:-2]
-  let value = substitute(value, '^\([^:]\+\):\([^;]*;\)', '\1: \2', '')
+  if zencoding#useFilter(a:filters, 'fc')
+    let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1: \2', 'g')
+  else
+    let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1:\2', 'g')
+  endif
   if current.important
     let value = substitute(value, ';', ' !important;', '')
   endif
@@ -106,7 +177,7 @@ function! zencoding#lang#css#balanceTag(flag) range
       let block = zencoding#util#searchRegion('^', ';')
       if zencoding#util#regionIsValid(block)
         call zencoding#util#selectRegion(block)
-	    return
+        return
       endif
     endif
   else
@@ -118,7 +189,7 @@ function! zencoding#lang#css#balanceTag(flag) range
           call zencoding#util#selectRegion(block)
           return
         endif
-	  endif
+      endif
     else
       let pos = searchpos('.*;', 'nW')
       if pos[0] != 0
@@ -126,7 +197,7 @@ function! zencoding#lang#css#balanceTag(flag) range
         let block = zencoding#util#searchRegion('^', ';')
         if zencoding#util#regionIsValid(block)
           call zencoding#util#selectRegion(block)
-		  return
+          return
         endif
       endif
     endif

@@ -1,7 +1,7 @@
 "=============================================================================
 " zencoding.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 06-Jul-2012.
+" Last Change: 24-Oct-2012.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -14,9 +14,20 @@ function! zencoding#getExpandos(type, key)
   return a:key
 endfunction
 
+function! zencoding#splitFilterArg(filters)
+  for f in a:filters
+    if f =~ '^/'
+      return f[1:]
+    endif
+  endfor
+  return ''
+endfunction
+
 function! zencoding#useFilter(filters, filter)
   for f in a:filters
-    if f == a:filter
+    if a:filter == '/' && f =~ '^/'
+      return 1
+    elseif f == a:filter
       return 1
     endif
   endfor
@@ -269,15 +280,20 @@ function! zencoding#expandAbbr(mode, abbr) range
     if len(leader) == 0
       return
     endif
-    let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\)\s*,\{0,1}\s*\)*$'
+    let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
     if leader =~ mx
-      let filters = split(matchstr(leader, mx)[1:], '\s*,\s*')
+      let filters = map(split(matchstr(leader, mx)[1:], '\s*[^\\]\zs,\s*'), 'substitute(v:val, "\\\\\\\\zs.\\\\ze", "&", "g")')
       let leader = substitute(leader, mx, '', '')
     endif
     if leader =~ '\*'
       let query = substitute(leader, '*', '*' . (a:lastline - a:firstline + 1), '')
       if query !~ '}\s*$'
         let query .= '>{$#}'
+      endif
+      if zencoding#useFilter(filters, '/')
+        let spl = zencoding#splitFilterArg(filters)
+        let fline = getline(a:firstline)
+        let query = substitute(query, '>\{0,1}{\$#}\s*$', '{\\$column\\$}*' . len(split(fline, spl)), '')
       endif
       let items = zencoding#parseIntoTree(query, type).child
       for item in items
@@ -297,9 +313,16 @@ function! zencoding#expandAbbr(mode, abbr) range
           let lpart = substitute(lpart, '^[0-9.-]\+\s\+', '', '')
           let lpart = substitute(lpart, '\s\+$', '', '')
         endif
-        let expand = substitute(expand, '\$line'.(n-a:firstline+1).'\$', '\=lpart', 'g')
+        if zencoding#useFilter(filters, '/')
+          for column in split(lpart, spl)
+            let expand = substitute(expand, '\$column\$', '\=column', '')
+          endfor
+        else
+          let expand = substitute(expand, '\$line'.(n-a:firstline+1).'\$', '\=lpart', 'g')
+        endif
       endfor
       let expand = substitute(expand, '\$line\d*\$', '', 'g')
+      let expand = substitute(expand, '\$column\$', '', 'g')
       let content = join(getline(a:firstline, a:lastline), "\n")
       if stridx(expand, '$#') < len(expand)-2
         let expand = substitute(expand, '^\(.*\)\$#\s*$', '\1', '')
@@ -362,7 +385,7 @@ function! zencoding#expandAbbr(mode, abbr) range
     endif
     let rest = getline('.')[len(line):]
     let str = part
-    let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\)\s*,\{0,1}\s*\)*$'
+    let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
     if str =~ mx
       let filters = split(matchstr(str, mx)[1:], '\s*,\s*')
       let str = substitute(str, mx, '', '')
@@ -565,7 +588,7 @@ function! zencoding#codePretty() range
 endfunction
 
 function! zencoding#ExpandWord(abbr, type, orig)
-  let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\)\s*,\{0,1}\s*\)*$'
+  let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
   let str = a:abbr
   let type = a:type
 
@@ -838,7 +861,7 @@ let s:zen_settings = {
 \            'bdr+': 'border-right:1px solid #000;',
 \            'bdr:n': 'border-right:none;',
 \            'bdrw': 'border-right-width:|;',
-\            'bdrs': 'border-right-style:|;',
+\            'bdrt': 'border-right-style:|;',
 \            'bdrs:n': 'border-right-style:none;',
 \            'bdrc': 'border-right-color:#000;',
 \            'bdb': 'border-bottom:|;',
@@ -855,7 +878,7 @@ let s:zen_settings = {
 \            'bdls': 'border-left-style:|;',
 \            'bdls:n': 'border-left-style:none;',
 \            'bdlc': 'border-left-color:#000;',
-\            'bdrz': 'border-radius:|;',
+\            'bdrs': 'border-radius:|;',
 \            'bdtrrz': 'border-top-right-radius:|;',
 \            'bdtlrz': 'border-top-left-radius:|;',
 \            'bdbrrz': 'border-bottom-right-radius:|;',
@@ -1116,6 +1139,15 @@ let s:zen_settings = {
 \    },
 \    'sass': {
 \        'extends': 'css',
+\        'snippets': {
+\            '@if': "@if {\n\t|\n}",
+\            '@e': "@else {\n\t|\n}",
+\            '@in': "@include |",
+\            '@ex': "@extend |",
+\            '@mx': "@mixin {\n\t|\n}",
+\            '@fn': "@function {\n\t|\n}",
+\            '@r': "@return |",
+\        },
 \    },
 \    'scss': {
 \        'extends': 'css',
@@ -1128,48 +1160,48 @@ let s:zen_settings = {
 \            'html:4t': "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">\n"
 \                    ."<html lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\">\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\">\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>",
 \            'html:4s': "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">\n"
 \                    ."<html lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\">\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\">\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>",
 \            'html:xt': "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n"
 \                    ."<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>",
 \            'html:xs': "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
 \                    ."<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>",
 \            'html:xxs': "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">\n"
 \                    ."<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta http-equiv=\"Content-Type\" content=\"text/html;charset=${charset}\" />\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>",
 \            'html:5': "<!DOCTYPE HTML>\n"
 \                    ."<html lang=\"${lang}\">\n"
 \                    ."<head>\n"
-\                    ."    <meta charset=\"${charset}\">\n"
-\                    ."    <title></title>\n"
+\                    ."\t<meta charset=\"${charset}\">\n"
+\                    ."\t<title></title>\n"
 \                    ."</head>\n"
 \                    ."<body>\n\t${child}|\n</body>\n"
 \                    ."</html>"
@@ -1316,7 +1348,8 @@ let s:zen_settings = {
 \        },
 \        'empty_elements': 'area,base,basefont,br,col,frame,hr,img,input,isindex,link,meta,param,embed,keygen,command',
 \        'block_elements': 'address,applet,blockquote,button,center,dd,del,dir,div,dl,dt,fieldset,form,frameset,hr,iframe,ins,isindex,li,link,map,menu,noframes,noscript,object,ol,p,pre,script,table,tbody,td,tfoot,th,thead,tr,ul,h1,h2,h3,h4,h5,h6',
-\        'inline_elements': 'a,abbr,acronym,applet,b,basefont,bdo,big,br,button,cite,code,del,dfn,em,font,i,iframe,img,input,ins,kbd,label,map,object,q,s,samp,script,select,small,span,strike,strong,sub,sup,textarea,tt,u,var'
+\        'inline_elements': 'a,abbr,acronym,applet,b,basefont,bdo,big,br,button,cite,code,del,dfn,em,font,i,iframe,img,input,ins,kbd,label,map,object,q,s,samp,script,select,small,span,strike,strong,sub,sup,textarea,tt,u,var',
+\        'empty_element_suffix': ' />'
 \    },
 \    'xsl': {
 \        'extends': 'html',
@@ -1393,7 +1426,7 @@ let s:zen_settings = {
 \        'snippets': {
 \            'xsd:w3c': "<?xml version=\"1.0\"?>\n"
 \                    ."<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\n"
-\                    ."    <xsd:element name=\"\" type=\"\"/>\n"
+\                    ."\t<xsd:element name=\"\" type=\"\"/>\n"
 \                    ."</xsd:schema>\n"
 \        }
 \    }
