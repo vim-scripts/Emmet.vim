@@ -1,20 +1,23 @@
-function! zencoding#lang#css#findTokens(str)
+function! emmet#lang#css#findTokens(str)
   return substitute(a:str, '^.*[;{]\s*', '', '')
 endfunction
 
-function! zencoding#lang#css#parseIntoTree(abbr, type)
+function! emmet#lang#css#parseIntoTree(abbr, type)
   let abbr = a:abbr
   let type = a:type
   let prefix = 0
   let value = ''
 
-  let settings = zencoding#getSettings()
-  let indent = zencoding#getIndentation(type)
-  
+  let settings = emmet#getSettings()
+  let indent = emmet#getIndentation(type)
+  let aliases = emmet#getResource(type, 'aliases', {})
+  let snippets = emmet#getResource(type, 'snippets', {})
+  let use_pipe_for_cursor = emmet#getResource(type, 'use_pipe_for_cursor', 1)
+
   let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0 }
 
   " emmet
-  let tokens = split(abbr, '+\ze[^)!]')
+  let tokens = split(abbr, '+\ze[^+)!]')
   for n in range(len(tokens))
     let token = tokens[n]
     let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+[pe]\{0,1}-\{0,1}\|-auto\)*\)$')
@@ -40,12 +43,14 @@ function! zencoding#lang#css#parseIntoTree(abbr, type)
           let value .= v . 'em'
         elseif v == 'auto'
           let value .= v
+        elseif v == '0'
+          let value .= '0'
         else
           let value .= v . 'px'
         endif
       endfor
     endif
-  
+
     let tag_name = token
     if tag_name =~ '.!$'
       let tag_name = tag_name[:-2]
@@ -56,16 +61,13 @@ function! zencoding#lang#css#parseIntoTree(abbr, type)
     " make default node
     let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': important }
     let current.name = tag_name
-  
+
     " aliases
-    let aliases = zencoding#getResource(type, 'aliases', {})
     if has_key(aliases, tag_name)
       let current.name = aliases[tag_name]
     endif
-    let use_pipe_for_cursor = zencoding#getResource(type, 'use_pipe_for_cursor', 1)
-  
+
     " snippets
-    let snippets = zencoding#getResource(type, 'snippets', {})
     if !empty(snippets) && has_key(snippets, tag_name)
       let snippet = snippets[tag_name]
       if use_pipe_for_cursor
@@ -76,27 +78,27 @@ function! zencoding#lang#css#parseIntoTree(abbr, type)
       let current.snippet = join(lines, "\n")
       let current.name = ''
       let current.snippet = substitute(current.snippet, ';', value . ';', '')
-      if use_pipe_for_cursor && len(value) > 0 && stridx(value, '${cursor}') == -1
-        let current.snippet = substitute(current.snippet, '${cursor}', '', 'g') . '${cursor}'
+      if use_pipe_for_cursor && len(value) > 0
+        let current.snippet = substitute(current.snippet, '\${cursor}', '', 'g')
       endif
       if n < len(tokens) - 1
         let current.snippet .= "\n"
       endif
     endif
-  
+
     let current.pos = 0
     let lg = matchlist(token, '^\%(linear-gradient\|lg\)(\s*\(\w\+\)\s*,\s*\([^,]\+\)\s*,\s*\([^)]\+\)\s*)$')
     if len(lg)
       let current.name = ''
-      let current.snippet = printf("background-image: -webkit-gradient(%s, 0 0, 0 100%, from(%s), to(%s));\n", lg[1], lg[2], lg[3])
+      let current.snippet = printf("background-image:-webkit-gradient(%s, 0 0, 0 100%, from(%s), to(%s));\n", lg[1], lg[2], lg[3])
       call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image: -webkit-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      let current.snippet = printf("background-image:-webkit-linear-gradient(%s, %s);\n", lg[2], lg[3])
       call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image: -moz-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      let current.snippet = printf("background-image:-moz-linear-gradient(%s, %s);\n", lg[2], lg[3])
       call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image: -o-linear-gradient(%s, %s);\n", lg[2], lg[3])
+      let current.snippet = printf("background-image:-o-linear-gradient(%s, %s);\n", lg[2], lg[3])
       call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image: linear-gradient(%s, %s);\n", lg[2], lg[3])
+      let current.snippet = printf("background-image:linear-gradient(%s, %s);\n", lg[2], lg[3])
       call add(root.child, deepcopy(current))
     elseif prefix
       let snippet = current.snippet
@@ -113,10 +115,10 @@ function! zencoding#lang#css#parseIntoTree(abbr, type)
   return root
 endfunction
 
-function! zencoding#lang#css#toString(settings, current, type, inline, filters, itemno, indent)
+function! emmet#lang#css#toString(settings, current, type, inline, filters, itemno, indent)
   let current = a:current
   let value = current.value[1:-2]
-  if zencoding#useFilter(a:filters, 'fc')
+  if emmet#useFilter(a:filters, 'fc')
     let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1: \2', 'g')
   else
     let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1:\2', 'g')
@@ -127,25 +129,25 @@ function! zencoding#lang#css#toString(settings, current, type, inline, filters, 
   return value
 endfunction
 
-function! zencoding#lang#css#imageSize()
+function! emmet#lang#css#imageSize()
 endfunction
 
-function! zencoding#lang#css#encodeImage()
+function! emmet#lang#css#encodeImage()
 endfunction
 
-function! zencoding#lang#css#parseTag(tag)
+function! emmet#lang#css#parseTag(tag)
   return {}
 endfunction
 
-function! zencoding#lang#css#toggleComment()
+function! emmet#lang#css#toggleComment()
   let line = getline('.')
   let mx = '^\(\s*\)/\*\s*\(.*\)\s*\*/\s*$'
   if line =~ '{\s*$'
-    let block = zencoding#util#searchRegion('/\*', '\*/\zs')
-    if zencoding#util#regionIsValid(block)
-      let content = zencoding#util#getContent(block)
+    let block = emmet#util#searchRegion('/\*', '\*/\zs')
+    if emmet#util#regionIsValid(block)
+      let content = emmet#util#getContent(block)
       let content = substitute(content, '/\*\s\(.*\)\s\*/', '\1', '')
-      call zencoding#util#setContent(block, content)
+      call emmet#util#setContent(block, content)
     else
       let node = expand('<cword>')
       if len(node)
@@ -165,28 +167,28 @@ function! zencoding#lang#css#toggleComment()
   endif
 endfunction
 
-function! zencoding#lang#css#balanceTag(flag) range
+function! emmet#lang#css#balanceTag(flag) range
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
     let curpos = getpos('.')
   endif
-  let block = zencoding#util#getVisualBlock()
-  if !zencoding#util#regionIsValid(block)
+  let block = emmet#util#getVisualBlock()
+  if !emmet#util#regionIsValid(block)
     if a:flag > 0
-      let block = zencoding#util#searchRegion('^', ';')
-      if zencoding#util#regionIsValid(block)
-        call zencoding#util#selectRegion(block)
+      let block = emmet#util#searchRegion('^', ';')
+      if emmet#util#regionIsValid(block)
+        call emmet#util#selectRegion(block)
         return
       endif
     endif
   else
     if a:flag > 0
-      let content = zencoding#util#getContent(block)
+      let content = emmet#util#getContent(block)
       if content !~ '^{.*}$'
-        let block = zencoding#util#searchRegion('{', '}')
-        if zencoding#util#regionIsValid(block)
-          call zencoding#util#selectRegion(block)
+        let block = emmet#util#searchRegion('{', '}')
+        if emmet#util#regionIsValid(block)
+          call emmet#util#selectRegion(block)
           return
         endif
       endif
@@ -194,9 +196,9 @@ function! zencoding#lang#css#balanceTag(flag) range
       let pos = searchpos('.*;', 'nW')
       if pos[0] != 0
         call setpos('.', [0, pos[0], pos[1], 0])
-        let block = zencoding#util#searchRegion('^', ';')
-        if zencoding#util#regionIsValid(block)
-          call zencoding#util#selectRegion(block)
+        let block = emmet#util#searchRegion('^', ';')
+        if emmet#util#regionIsValid(block)
+          call emmet#util#selectRegion(block)
           return
         endif
       endif
@@ -209,7 +211,7 @@ function! zencoding#lang#css#balanceTag(flag) range
   endif
 endfunction
 
-function! zencoding#lang#css#moveNextPrev(flag)
+function! emmet#lang#css#moveNextPrev(flag)
   let pos = search('""\|()\|\(:\s*\zs$\)', a:flag ? 'Wbp' : 'Wp')
   if pos == 2
     startinsert!
@@ -219,10 +221,10 @@ function! zencoding#lang#css#moveNextPrev(flag)
   endif
 endfunction
 
-function! zencoding#lang#css#splitJoinTag()
+function! emmet#lang#css#splitJoinTag()
   " nothing to do
 endfunction
 
-function! zencoding#lang#css#removeTag()
+function! emmet#lang#css#removeTag()
   " nothing to do
 endfunction

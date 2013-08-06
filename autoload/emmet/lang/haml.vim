@@ -1,20 +1,20 @@
-function! zencoding#lang#haml#findTokens(str)
-  return zencoding#lang#html#findTokens(a:str)
+function! emmet#lang#haml#findTokens(str)
+  return emmet#lang#html#findTokens(a:str)
 endfunction
 
-function! zencoding#lang#haml#parseIntoTree(abbr, type)
-  return zencoding#lang#html#parseIntoTree(a:abbr, a:type)
+function! emmet#lang#haml#parseIntoTree(abbr, type)
+  return emmet#lang#html#parseIntoTree(a:abbr, a:type)
 endfunction
 
-function! zencoding#lang#haml#toString(settings, current, type, inline, filters, itemno, indent)
+function! emmet#lang#haml#toString(settings, current, type, inline, filters, itemno, indent)
   let settings = a:settings
   let current = a:current
   let type = a:type
   let inline = a:inline
   let filters = a:filters
   let itemno = a:itemno
-  let indent = a:indent
-  let dollar_expr = zencoding#getResource(type, 'dollar_expr', 1)
+  let indent = emmet#getIndentation(type)
+  let dollar_expr = emmet#getResource(type, 'dollar_expr', 1)
   let str = ""
 
   let comment_indent = ''
@@ -26,7 +26,10 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
   if len(current.name) > 0
     let str .= '%' . current_name
     let tmp = ''
-    for attr in keys(current.attr)
+    for attr in emmet#util#unique(current.attrs_order + keys(current.attr))
+      if !has_key(current.attr, attr)
+        continue
+      endif
       let val = current.attr[attr]
       if dollar_expr
         while val =~ '\$\([^#{]\|$\)'
@@ -59,6 +62,7 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
         let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
         let text = substitute(text, '\${nr}', "\n", 'g')
         let text = substitute(text, '\\\$', '$', 'g')
+        let str = substitute(str, '\$#', text, 'g')
       endif
       let lines = split(text, "\n")
       if len(lines) == 1
@@ -88,7 +92,7 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
       endif
     elseif len(current.child) > 0
       for child in current.child
-        let inner .= zencoding#toString(child, type, inline, filters, itemno)
+        let inner .= emmet#toString(child, type, inline, filters, itemno, indent)
       endfor
       let inner = substitute(inner, "\n", "\n" . escape(indent, '\'), 'g')
       let inner = substitute(inner, "\n" . escape(indent, '\') . "$", "", 'g')
@@ -106,9 +110,9 @@ function! zencoding#lang#haml#toString(settings, current, type, inline, filters,
   return str
 endfunction
 
-function! zencoding#lang#haml#imageSize()
+function! emmet#lang#haml#imageSize()
   let line = getline('.')
-  let current = zencoding#lang#haml#parseTag(line)
+  let current = emmet#lang#haml#parseTag(line)
   if empty(current) || !has_key(current.attr, 'src')
     return
   endif
@@ -119,21 +123,23 @@ function! zencoding#lang#haml#imageSize()
     let fn = simplify(expand('%:h') . '/' . fn)
   endif
 
-  let [width, height] = zencoding#util#getImageSize(fn)
+  let [width, height] = emmet#util#getImageSize(fn)
   if width == -1 && height == -1
     return
   endif
   let current.attr.width = width
   let current.attr.height = height
-  let haml = zencoding#toString(current, 'haml', 1)
+  let current.attrs_order += ['width', 'height']
+  let haml = emmet#toString(current, 'haml', 1)
+  let haml = substitute(haml, '\${cursor}', '', '')
   call setline('.', substitute(matchstr(line, '^\s*') . haml, "\n", "", "g"))
 endfunction
 
-function! zencoding#lang#haml#encodeImage()
+function! emmet#lang#haml#encodeImage()
 endfunction
 
-function! zencoding#lang#haml#parseTag(tag)
-  let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0 }
+function! emmet#lang#haml#parseTag(tag)
+  let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'attrs_order': [] }
   let mx = '%\([a-zA-Z][a-zA-Z0-9]*\)\s*\%({\(.*\)}\)'
   let match = matchstr(a:tag, mx)
   let current.name = substitute(match, mx, '\1', 'i')
@@ -148,12 +154,13 @@ function! zencoding#lang#haml#parseTag(tag)
     let name = attr_match[1]
     let value = len(attr_match[2]) ? attr_match[2] : attr_match[3]
     let current.attr[name] = value
+    let current.attrs_order += [name]
     let attrs = attrs[stridx(attrs, match) + len(match):]
   endwhile
   return current
 endfunction
 
-function! zencoding#lang#haml#toggleComment()
+function! emmet#lang#haml#toggleComment()
   let line = getline('.')
   let space = matchstr(line, '^\s*')
   if line =~ '^\s*-#'
@@ -163,8 +170,8 @@ function! zencoding#lang#haml#toggleComment()
   endif
 endfunction
 
-function! zencoding#lang#haml#balanceTag(flag) range
-  let block = zencoding#util#getVisualBlock()
+function! emmet#lang#haml#balanceTag(flag) range
+  let block = emmet#util#getVisualBlock()
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
@@ -174,7 +181,7 @@ function! zencoding#lang#haml#balanceTag(flag) range
   let ml = len(matchstr(getline(n), '^\s*'))
 
   if a:flag > 0
-    if a:flag == 1 || !zencoding#util#regionIsValid(block)
+    if a:flag == 1 || !emmet#util#regionIsValid(block)
       let n = line('.')
     else
       while n > 0
@@ -228,7 +235,7 @@ function! zencoding#lang#haml#balanceTag(flag) range
   endif
 endfunction
 
-function! zencoding#lang#haml#moveNextPrev(flag)
+function! emmet#lang#haml#moveNextPrev(flag)
   let pos = search('""', a:flag ? 'Wb' : 'W')
   if pos != 0
     silent! normal! l
@@ -236,7 +243,7 @@ function! zencoding#lang#haml#moveNextPrev(flag)
   endif
 endfunction
 
-function! zencoding#lang#haml#splitJoinTag()
+function! emmet#lang#haml#splitJoinTag()
   let n = line('.')
   let sml = len(matchstr(getline(n), '^\s*%[a-z]'))
   while n > 0
@@ -261,7 +268,7 @@ function! zencoding#lang#haml#splitJoinTag()
       else
         let tag = matchstr(getline(sn), '^\s*%\zs\(\w\+\)')
         let spaces = matchstr(getline(sn), '^\s*')
-        let settings = zencoding#getSettings()
+        let settings = emmet#getSettings()
         if stridx(','.settings.html.inline_elements.',', ','.tag.',') == -1
           call append(sn, spaces . '   ')
           call setpos('.', [0, sn+1, 1, 0])
@@ -276,7 +283,7 @@ function! zencoding#lang#haml#splitJoinTag()
   endwhile
 endfunction
 
-function! zencoding#lang#haml#removeTag()
+function! emmet#lang#haml#removeTag()
   let n = line('.')
   let ml = 0
   while n > 0

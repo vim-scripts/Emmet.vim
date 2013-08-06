@@ -1,14 +1,14 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=2981
 
 
-This is vim script support expanding abbreviation like zen-coding.
-ref: http://code.google.com/p/zen-coding/
+This is vim script support expanding abbreviation like emmet.
+ref: http://emmet.io/
 
-There is a movie using zencoding.vim
-ref: http://mattn.github.com/zencoding-vim
+There is a movie using emmet.vim
+ref: http://mattn.github.com/emmet-vim
 
 Source Repository.
-ref: http://github.com/mattn/zencoding-vim
+ref: http://github.com/mattn/emmet-vim
 
 Type abbreviation
    +-------------------------------------
@@ -45,18 +45,18 @@ And type "<c-y>,"
 
 Tutorial:
 
-  http://github.com/mattn/zencoding-vim/raw/master/TUTORIAL
+  http://github.com/mattn/emmet-vim/raw/master/TUTORIAL
 
 How work this:
 
-  http://mattn.github.com/zencoding-vim
+  http://mattn.github.com/emmet-vim
 
 Tips:
 
 You can customize behavior of expanding with overriding config.
-This configuration will be marged at loading plugin. 
+This configuration will be merged at loading plugin.
 
-  let g:user_zen_settings = {
+  let g:user_emmet_settings = {
   \  'indentation' : '  ',
   \  'perl' : {
   \    'aliases' : {
@@ -69,9 +69,9 @@ This configuration will be marged at loading plugin.
   \  }
   \}
 
-  let g:user_zen_expandabbr_key = '<c-e>'
+  let g:user_emmet_expandabbr_key = '<c-e>'
 
-  let g:use_zen_complete_tag = 1
+  let g:use_emmet_complete_tag = 1
 
-You can set language attribute in html using zen_settings['lang'].
+You can set language attribute in html using emmet_settings['lang'].
 
