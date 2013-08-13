@@ -124,13 +124,7 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
     endif
     for k in keys(custom_expands)
       if tag_name =~ k
-        if parent.name == ''
-          let div = emmet#lang#html#parseTag('<div/>')
-          let div.value = '{\${' . tag_name . '}}'
-          let current.snippet = emmet#toString(div, type, 0, [])
-        else
-          let current.snippet = '${' . tag_name . '}'
-        endif
+        let current.snippet = '${' . tag_name . '}'
         let current.name = ''
         break
       endif
@@ -192,7 +186,7 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
         if item[0] == '['
           let atts = item[1:-2]
           while len(atts)
-            let amat = matchstr(atts, '\(\w\+\%(="[^"]*"\|=''[^'']*''\|[^ ''"\]]*\)\{0,1}\)')
+            let amat = matchstr(atts, '\([0-9a-zA-Z-:]\+\%(="[^"]*"\|=''[^'']*''\|[^ ''"\]]*\)\{0,1}\)')
             if len(amat) == 0
               break
             endif
@@ -333,7 +327,11 @@ function! emmet#lang#html#toString(settings, current, type, inline, filters, ite
     let text = current.value[1:-2]
     if dollar_expr
       " TODO: regexp engine specified
-      let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      if exists('&regexpengine')
+        let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      else
+        let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      endif
       let text = substitute(text, '\${nr}', "\n", 'g')
       let text = substitute(text, '\\\$', '$', 'g')
     endif
@@ -349,7 +347,11 @@ function! emmet#lang#html#toString(settings, current, type, inline, filters, ite
     if dollar_expr
       while val =~ '\$\([^#{]\|$\)'
         " TODO: regexp engine specified
-        let val = substitute(val, '\%#=1\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        if exists('&regexpengine')
+          let val = substitute(val, '\%#=1\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        else
+          let val = substitute(val, '\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+        endif
       endwhile
       let attr = substitute(attr, '\$$', itemno+1, '')
     endif
@@ -369,7 +371,11 @@ function! emmet#lang#html#toString(settings, current, type, inline, filters, ite
     let text = current.value[1:-2]
     if dollar_expr
       " TODO: regexp engine specified
-      let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      if exists('&regexpengine')
+        let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      else
+        let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+      endif
       let text = substitute(text, '\${nr}', "\n", 'g')
       let text = substitute(text, '\\\$', '$', 'g')
       let str = substitute(str, '\("\zs$#\ze"\|\s\zs\$#"\|"\$#\ze\s\)', text, 'g')
@@ -432,7 +438,10 @@ function! emmet#lang#html#imageSize()
   if fn =~ '^\s*$'
     return
   elseif fn !~ '^\(/\|http\)'
-    let fn = simplify(expand('%:h') . '/' . fn)
+    let fn = resolve(expand(fn))
+    if !filereadable(fn)
+      let fn = simplify(expand('%:h') . '/' . fn)
+    endif
   endif
 
   let [width, height] = emmet#util#getImageSize(fn)

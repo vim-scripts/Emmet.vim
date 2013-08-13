@@ -1,7 +1,7 @@
 "=============================================================================
 " emmet.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 06-Aug-2013.
+" Last Change: 13-Aug-2013.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -169,7 +169,7 @@ function! emmet#toString(...)
   let rtype = emmet#lang#exists(type) ? type : 'html'
   while itemno < current.multiplier
     if len(current.name)
-      if group_itemno != 0
+      if current.multiplier == 1
         let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, group_itemno, indent)
       else
         let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, itemno, indent)
@@ -199,7 +199,11 @@ function! emmet#toString(...)
           let text = current.value[1:-2]
           if dollar_expr
             " TODO: regexp engine specified
-            let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", max([itemno, group_itemno])+1).submatch(2)', 'g')
+            if exists('&regexpengine')
+              let text = substitute(text, '\%#=1\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", max([itemno, group_itemno])+1).submatch(2)', 'g')
+            else
+              let text = substitute(text, '\%(\\\)\@\<!\(\$\+\)\([^{#]\|$\)', '\=printf("%0".len(submatch(1))."d", max([itemno, group_itemno])+1).submatch(2)', 'g')
+            endif
             let text = substitute(text, '\${nr}', "\n", 'g')
             let text = substitute(text, '\\\$', '$', 'g')
           endif
@@ -213,8 +217,7 @@ function! emmet#toString(...)
           let inner .= emmet#toString(n, type, inline, filters, group_itemno, indent)
         endfor
       endif
-      let spaces = matchstr(str, '\s*\ze\${child}')
-      let inner = substitute(inner, "\n", "\n" . spaces, 'g')
+      let inner = substitute(inner, "\n", "\n" . indent, 'g')
       let str = substitute(str, '\${child}', inner, '')
     endif
     let itemno = itemno + 1
@@ -224,6 +227,11 @@ endfunction
 
 function! emmet#getSettings()
   return s:emmet_settings
+endfunction
+
+function! emmet#getFilters(type)
+  let filterstr = emmet#getResource(a:type, 'filters', '')
+  return split(filterstr, '\s*,\s*')
 endfunction
 
 function! emmet#getResource(type, name, default)
@@ -241,7 +249,12 @@ function! emmet#getResource(type, name, default)
     endif
     for ext in extends
       if has_key(s:emmet_settings, ext) && has_key(s:emmet_settings[ext], a:name)
-        call emmet#mergeConfig(ret, s:emmet_settings[ext][a:name])
+        let V = s:emmet_settings[ext][a:name]
+        if type(ret) == 3 || type(ret) == 4
+          call emmet#mergeConfig(ret, s:emmet_settings[ext][a:name])
+        else
+          let ret = s:emmet_settings[ext][a:name]
+        endif
       endif
     endfor
   endif
@@ -260,10 +273,14 @@ endfunction
 
 function! emmet#getFileType(...)
   let flg = get(a:000, 0, 0)
-  let type = &ft
-  if emmet#lang#exists(&ft)
-    let type = &ft
-  else
+  let type = ''
+  for part in split(&ft, '\.')
+    if emmet#lang#exists(part)
+      let type = part
+      break
+    endif
+  endfor
+  if type == ''
     let base = emmet#getBaseType(type)
     if base != ""
       if flg
@@ -390,13 +407,13 @@ function! emmet#expandAbbr(mode, abbr) range
   let rtype = emmet#getFileType(1)
   let indent = emmet#getIndentation(type)
   let expand = ''
-  let filters = ['html']
   let line = ''
   let part = ''
   let rest = ''
 
-  if has_key(s:emmet_settings, type) && has_key(s:emmet_settings[type], 'filters')
-    let filters = split(s:emmet_settings[type].filters, '\s*,\s*')
+  let filters = emmet#getFilters(type)
+  if len(filters) == 0
+    let filters = ['html']
   endif
 
   if a:mode == 2
@@ -711,10 +728,11 @@ function! emmet#ExpandWord(abbr, type, orig)
   if str =~ mx
     let filters = split(matchstr(str, mx)[1:], '\s*,\s*')
     let str = substitute(str, mx, '', '')
-  elseif has_key(s:emmet_settings[a:type], 'filters')
-    let filters = split(s:emmet_settings[a:type].filters, '\s*,\s*')
   else
-    let filters = ['html']
+    let filters = emmet#getFilters(a:type)
+    if len(filters) == 0
+      let filters = ['html']
+    endif
   endif
   let items = emmet#parseIntoTree(str, a:type).child
   let expand = ''
@@ -1276,7 +1294,6 @@ let s:emmet_settings = {
 \        'extends': 'css',
 \    },
 \    'html': {
-\        'indentation': "\t",
 \        'snippets': {
 \            'cc:ie6': "<!--[if lte IE 6]>\n\t${child}|\n<![endif]-->",
 \            'cc:ie': "<!--[if IE]>\n\t${child}|\n<![endif]-->",
