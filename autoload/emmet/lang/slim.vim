@@ -98,10 +98,7 @@ function! emmet#lang#slim#imageSize()
   if fn =~ '^\s*$'
     return
   elseif fn !~ '^\(/\|http\)'
-    let fn = resolve(expand(fn))
-    if !filereadable(fn)
-      let fn = simplify(expand('%:h') . '/' . fn)
-    endif
+    let fn = simplify(expand('%:h') . '/' . fn)
   endif
 
   let [width, height] = emmet#util#getImageSize(fn)
@@ -120,7 +117,7 @@ function! emmet#lang#slim#encodeImage()
 endfunction
 
 function! emmet#lang#slim#parseTag(tag)
-  let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'attrs_order': [] }
+  let current = emmet#newNode()
   let mx = '\([a-zA-Z][a-zA-Z0-9]*\)\s\+\(.*\)'
   let match = matchstr(a:tag, mx)
   let current.name = substitute(match, mx, '\1', 'i')
@@ -156,7 +153,7 @@ function! emmet#lang#slim#balanceTag(flag) range
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
-    let curpos = getpos('.')
+    let curpos = emmet#util#getcurpos()
   endif
   let n = curpos[1]
   let ml = len(matchstr(getline(n), '^\s*'))
@@ -214,6 +211,10 @@ function! emmet#lang#slim#balanceTag(flag) range
     normal! V
     call setpos('.', [0, sn, 1, 0])
   endif
+endfunction
+
+function! emmet#lang#slim#moveNextPrevItem(flag)
+  return emmet#lang#slim#moveNextPrev(a:flag)
 endfunction
 
 function! emmet#lang#slim#moveNextPrev(flag)

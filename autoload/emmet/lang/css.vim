@@ -1,5 +1,5 @@
 function! emmet#lang#css#findTokens(str)
-  return substitute(a:str, '^.*[;{]\s*', '', '')
+  return substitute(substitute(a:str, '^.*[;{]\s*', '', ''), '}\s*$', '', '')
 endfunction
 
 function! emmet#lang#css#parseIntoTree(abbr, type)
@@ -14,104 +14,134 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
   let snippets = emmet#getResource(type, 'snippets', {})
   let use_pipe_for_cursor = emmet#getResource(type, 'use_pipe_for_cursor', 1)
 
-  let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0 }
+  let root = emmet#newNode()
 
   " emmet
   let tokens = split(abbr, '+\ze[^+)!]')
-  for n in range(len(tokens))
-    let token = tokens[n]
-    let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+[pe]\{0,1}-\{0,1}\|-auto\)*\)$')
-    if len(prop)
-      let token = substitute(prop[1], '^(\(.*\))', '\1', '')
-      if token =~ '^-'
-        let prefix = 1
-        let token = token[1:]
-      endif
-      let value = ''
-      for v in split(prop[2], '\d\zs-')
-        if len(value) > 0
-          let value .= ' '
+  let block = emmet#util#searchRegion("{", "}")
+  if type == 'css' && block[0] == [0,0] && block[1] == [0,0]
+    let current = emmet#newNode()
+    let current.snippet = abbr . " {\n\t${cursor}\n}"
+    let current.name = ''
+    call add(root.child, deepcopy(current))
+  else
+    for n in range(len(tokens))
+      let token = tokens[n]
+      let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+[pe]\{0,1}-\{0,1}\|-auto\)*\)$')
+      if len(prop)
+        let token = substitute(prop[1], '^(\(.*\))', '\1', '')
+        if token =~ '^-'
+          let prefix = 1
+          let token = token[1:]
         endif
-        if token =~ '^[z]'
-          " TODO
-          let value .= substitute(v, '[^0-9.]*$', '', '')
-        elseif v =~ 'p$'
-          let value .= substitute(v, 'p$', '%', '')
-        elseif v =~ 'e$'
-          let value .= substitute(v, 'e$', 'em', '')
-        elseif v =~ '\.'
-          let value .= v . 'em'
-        elseif v == 'auto'
-          let value .= v
-        elseif v == '0'
-          let value .= '0'
-        else
-          let value .= v . 'px'
+        let value = ''
+        for v in split(prop[2], '\d\zs-')
+          if len(value) > 0
+            let value .= ' '
+          endif
+          if token =~ '^[z]'
+            " TODO
+            let value .= substitute(v, '[^0-9.]*$', '', '')
+          elseif v =~ 'p$'
+            let value .= substitute(v, 'p$', '%', '')
+          elseif v =~ 'e$'
+            let value .= substitute(v, 'e$', 'em', '')
+          elseif v =~ '\.'
+            let value .= v . 'em'
+          elseif v == 'auto'
+            let value .= v
+          elseif v == '0'
+            let value .= '0'
+          else
+            let value .= v . 'px'
+          endif
+        endfor
+      endif
+  
+      let tag_name = token
+      if tag_name =~ '.!$'
+        let tag_name = tag_name[:-2]
+        let important = 1
+      else
+        let important = 0
+      endif
+      " make default node
+      let current = emmet#newNode()
+      let current.important = important
+      let current.name = tag_name
+  
+      " aliases
+      if has_key(aliases, tag_name)
+        let current.name = aliases[tag_name]
+      endif
+  
+      " snippets
+      if !empty(snippets)
+        let snippet_name = tag_name
+        if !has_key(snippets, snippet_name)
+          let pat = '^' . join(split(tag_name, '\zs'), '\%(\|[^:-]\+-\)')
+          let vv = filter(sort(keys(snippets)), 'snippets[v:val] =~ pat')
+          if len(vv) > 0
+            let snippet_name = vv[0]
+          else
+            let pat = '^' . join(split(tag_name, '\zs'), '\%(\|[^:-]\+-*\)')
+            let vv = filter(sort(keys(snippets)), 'snippets[v:val] =~ pat')
+            let minl = -1
+            for vk in vv
+              let vvs = snippets[vk]
+              if minl == -1 || len(vvs) < minl
+                let snippet_name = vk
+                let minl = len(vvs)
+              endif
+            endfor
+          endif
         endif
-      endfor
-    endif
-
-    let tag_name = token
-    if tag_name =~ '.!$'
-      let tag_name = tag_name[:-2]
-      let important = 1
-    else
-      let important = 0
-    endif
-    " make default node
-    let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': important }
-    let current.name = tag_name
-
-    " aliases
-    if has_key(aliases, tag_name)
-      let current.name = aliases[tag_name]
-    endif
-
-    " snippets
-    if !empty(snippets) && has_key(snippets, tag_name)
-      let snippet = snippets[tag_name]
-      if use_pipe_for_cursor
-        let snippet = substitute(snippet, '|', '${cursor}', 'g')
+        if has_key(snippets, snippet_name)
+          let snippet = snippets[snippet_name]
+          if use_pipe_for_cursor
+            let snippet = substitute(snippet, '|', '${cursor}', 'g')
+          endif
+          let lines = split(snippet, "\n")
+          call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
+          let current.snippet = join(lines, "\n")
+          let current.name = ''
+          let current.snippet = substitute(current.snippet, ';', value . ';', '')
+          if use_pipe_for_cursor && len(value) > 0
+            let current.snippet = substitute(current.snippet, '\${cursor}', '', 'g')
+          endif
+          if n < len(tokens) - 1
+            let current.snippet .= "\n"
+          endif
+        endif
       endif
-      let lines = split(snippet, "\n")
-      call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
-      let current.snippet = join(lines, "\n")
-      let current.name = ''
-      let current.snippet = substitute(current.snippet, ';', value . ';', '')
-      if use_pipe_for_cursor && len(value) > 0
-        let current.snippet = substitute(current.snippet, '\${cursor}', '', 'g')
+  
+      let current.pos = 0
+      let lg = matchlist(token, '^\%(linear-gradient\|lg\)(\s*\(\w\+\)\s*,\s*\([^,]\+\)\s*,\s*\([^)]\+\)\s*)$')
+      if len(lg)
+        let current.name = ''
+        let current.snippet = printf("background-image:-webkit-gradient(%s, 0 0, 0 100%, from(%s), to(%s));\n", lg[1], lg[2], lg[3])
+        call add(root.child, deepcopy(current))
+        let current.snippet = printf("background-image:-webkit-linear-gradient(%s, %s);\n", lg[2], lg[3])
+        call add(root.child, deepcopy(current))
+        let current.snippet = printf("background-image:-moz-linear-gradient(%s, %s);\n", lg[2], lg[3])
+        call add(root.child, deepcopy(current))
+        let current.snippet = printf("background-image:-o-linear-gradient(%s, %s);\n", lg[2], lg[3])
+        call add(root.child, deepcopy(current))
+        let current.snippet = printf("background-image:linear-gradient(%s, %s);\n", lg[2], lg[3])
+        call add(root.child, deepcopy(current))
+      elseif prefix
+        let snippet = current.snippet
+        let current.snippet = '-webkit-' . snippet . "\n"
+        call add(root.child, deepcopy(current))
+        let current.snippet = '-moz-' . snippet . "\n"
+        call add(root.child, deepcopy(current))
+        let current.snippet = snippet
+        call add(root.child, current)
+      else
+        call add(root.child, current)
       endif
-      if n < len(tokens) - 1
-        let current.snippet .= "\n"
-      endif
-    endif
-
-    let current.pos = 0
-    let lg = matchlist(token, '^\%(linear-gradient\|lg\)(\s*\(\w\+\)\s*,\s*\([^,]\+\)\s*,\s*\([^)]\+\)\s*)$')
-    if len(lg)
-      let current.name = ''
-      let current.snippet = printf("background-image:-webkit-gradient(%s, 0 0, 0 100%, from(%s), to(%s));\n", lg[1], lg[2], lg[3])
-      call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image:-webkit-linear-gradient(%s, %s);\n", lg[2], lg[3])
-      call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image:-moz-linear-gradient(%s, %s);\n", lg[2], lg[3])
-      call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image:-o-linear-gradient(%s, %s);\n", lg[2], lg[3])
-      call add(root.child, deepcopy(current))
-      let current.snippet = printf("background-image:linear-gradient(%s, %s);\n", lg[2], lg[3])
-      call add(root.child, deepcopy(current))
-    elseif prefix
-      let snippet = current.snippet
-      let current.snippet = '-webkit-' . snippet . "\n"
-      call add(root.child, deepcopy(current))
-      let current.snippet = '-moz-' . snippet . "\n"
-      call add(root.child, deepcopy(current))
-      let current.snippet = snippet
-      call add(root.child, current)
-    else
-      call add(root.child, current)
-    endif
-  endfor
+    endfor
+  endif
   return root
 endfunction
 
@@ -119,9 +149,9 @@ function! emmet#lang#css#toString(settings, current, type, inline, filters, item
   let current = a:current
   let value = current.value[1:-2]
   if emmet#useFilter(a:filters, 'fc')
-    let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1: \2', 'g')
+    let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1: \2', 'g')
   else
-    let value = substitute(value, '\([^:]\+\):\([^;]*;\)', '\1:\2', 'g')
+    let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1:\2', 'g')
   endif
   if current.important
     let value = substitute(value, ';', ' !important;', '')
@@ -130,6 +160,34 @@ function! emmet#lang#css#toString(settings, current, type, inline, filters, item
 endfunction
 
 function! emmet#lang#css#imageSize()
+  let img_region = emmet#util#searchRegion('{', '}')
+  if !emmet#util#regionIsValid(img_region) || !emmet#util#cursorInRegion(img_region)
+    return
+  endif
+  let content = emmet#util#getContent(img_region)
+  let fn = matchstr(content, '\<url(\zs[^)]\+\ze)')
+  let fn = substitute(fn, '[''" \t]', '', 'g')
+  if fn =~ '^\s*$'
+    return
+  elseif fn !~ '^\(/\|http\)'
+    let fn = simplify(expand('%:h') . '/' . fn)
+  endif
+  let [width, height] = emmet#util#getImageSize(fn)
+  if width == -1 && height == -1
+    return
+  endif
+  let indent = emmet#getIndentation('css')
+  if content =~ '.*\<width\s*:[^;]*;.*'
+    let content = substitute(content, '\<width\s*:[^;]*;', 'width: ' . width . 'px;', '')
+  else
+    let content = substitute(content, '}', indent . 'width: ' . width . "px;\n}", '')
+  endif
+  if content =~ '.*\<height\s*:[^;]*;.*'
+    let content = substitute(content, '\<height\s*:[^;]*;', 'height: ' . height . 'px;', '')
+  else
+    let content = substitute(content, '}', indent . 'height: ' . height . "px;\n}", '')
+  endif
+  call emmet#util#setContent(img_region, content)
 endfunction
 
 function! emmet#lang#css#encodeImage()
@@ -171,7 +229,7 @@ function! emmet#lang#css#balanceTag(flag) range
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
-    let curpos = getpos('.')
+    let curpos = emmet#util#getcurpos()
   endif
   let block = emmet#util#getVisualBlock()
   if !emmet#util#regionIsValid(block)
@@ -209,6 +267,10 @@ function! emmet#lang#css#balanceTag(flag) range
   else
     call setpos('.', curpos)
   endif
+endfunction
+
+function! emmet#lang#css#moveNextPrevItem(flag)
+  return emmet#lang#css#moveNextPrev(a:flag)
 endfunction
 
 function! emmet#lang#css#moveNextPrev(flag)

@@ -1,5 +1,5 @@
 function! emmet#lang#sass#findTokens(str)
-  return emmet#lang#html#findTokens(a:str)
+  return a:str
 endfunction
 
 function! emmet#lang#sass#parseIntoTree(abbr, type)
@@ -79,7 +79,7 @@ function! emmet#lang#sass#balanceTag(flag) range
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
-    let curpos = getpos('.')
+    let curpos = emmet#util#getcurpos()
   endif
   let n = curpos[1]
   let ml = len(matchstr(getline(n), '^\s*'))
@@ -137,6 +137,10 @@ function! emmet#lang#sass#balanceTag(flag) range
     normal! V
     call setpos('.', [0, sn, 1, 0])
   endif
+endfunction
+
+function! emmet#lang#sass#moveNextPrevItem(flag)
+  return emmet#lang#sass#moveNextPrev(a:flag)
 endfunction
 
 function! emmet#lang#sass#moveNextPrev(flag)

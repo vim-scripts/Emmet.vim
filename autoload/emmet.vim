@@ -1,7 +1,7 @@
 "=============================================================================
 " emmet.vim
 " Author: Yasuhiro Matsumoto <mattn.jp@gmail.com>
-" Last Change: 13-Aug-2013.
+" Last Change: 29-Oct-2013.
 
 let s:save_cpo = &cpo
 set cpo&vim
@@ -101,6 +101,25 @@ function! emmet#parseIntoTree(abbr, type)
   return emmet#lang#{rtype}#parseIntoTree(abbr, type)
 endfunction
 
+function! emmet#expandAbbrIntelligent(feedkey)
+  if !emmet#isExpandable()
+    return a:feedkey
+  endif 
+  return "\<plug>(EmmetExpandAbbr)"
+endfunction
+
+function! emmet#isExpandable()
+  let line = getline('.')
+  if col('.') < len(line)
+    let line = matchstr(line, '^\(.*\%'.col('.').'c\)')
+  endif
+  let part = matchstr(line, '\(\S.*\)$')
+  let type = emmet#getFileType()
+  let ftype = emmet#lang#exists(type) ? type : 'html'
+  let part = emmet#lang#{ftype}#findTokens(part)
+  return len(part) > 0
+endfunction
+
 function! emmet#mergeConfig(lhs, rhs)
   if type(a:lhs) == 3 && type(a:rhs) == 3
     let a:lhs += a:rhs
@@ -127,6 +146,27 @@ function! emmet#mergeConfig(lhs, rhs)
         let a:lhs[key] = a:rhs[key]
       endif
     endfor
+  endif
+endfunction
+
+function! emmet#newNode()
+  return { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'basevalue': 0, 'basedirect': 1, 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0, 'attrs_order': ['id', 'class'] }
+endfunction
+
+function! s:itemno(itemno, current)
+  let current = a:current
+  if current.basedirect > 0
+    if current.basevalue == 0
+      return a:itemno
+    else
+      return current.basevalue - 1 + a:itemno
+    endif
+  else
+    if current.basevalue == 0
+      return current.multiplier - 1 - a:itemno
+    else
+      return current.multiplier + current.basevalue - 2 - a:itemno
+    endif
   endif
 endfunction
 
@@ -170,9 +210,9 @@ function! emmet#toString(...)
   while itemno < current.multiplier
     if len(current.name)
       if current.multiplier == 1
-        let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, group_itemno, indent)
+        let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, s:itemno(group_itemno, current), indent)
       else
-        let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, itemno, indent)
+        let inner = emmet#lang#{rtype}#toString(s:emmet_settings, current, type, inline, filters, s:itemno(itemno, current), indent)
       endif
       if current.multiplier > 1
         let inner = substitute(inner, '\$#', '$line'.(itemno+1).'$', 'g')
@@ -189,8 +229,10 @@ function! emmet#toString(...)
       if len(snippet) > 0
         let tmp = snippet
         let tmp = substitute(tmp, '\${emmet_name}', current.name, 'g')
-        let snippet_node = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 0, 'parent': {}, 'value': '{'.tmp.'}', 'pos': 0, 'important': current.important }
-        let str = emmet#lang#{rtype}#toString(s:emmet_settings, snippet_node, type, inline, filters, group_itemno, indent)
+        let snippet_node = emmet#newNode()
+        let snippet_node.value = '{'.tmp.'}'
+        let snippet_node.important = current.important
+        let str = emmet#lang#{rtype}#toString(s:emmet_settings, snippet_node, type, inline, filters, s:itemno(group_itemno, current), indent)
       else
         if len(current.name)
           let str .= current.name
@@ -214,8 +256,10 @@ function! emmet#toString(...)
       if len(current.child)
         let render_type = emmet#getFileType(1)
         for n in current.child
-          let inner .= emmet#toString(n, type, inline, filters, group_itemno, indent)
+          let inner .= emmet#toString(n, type, inline, filters, s:itemno(group_itemno, n), indent)
         endfor
+      else
+        let inner = current.value[1:-2]
       endif
       let inner = substitute(inner, "\n", "\n" . indent, 'g')
       let str = substitute(str, '\${child}', inner, '')
@@ -279,17 +323,17 @@ function! emmet#getFileType(...)
       let type = part
       break
     endif
-  endfor
-  if type == ''
-    let base = emmet#getBaseType(type)
-    if base != ""
+    let base = emmet#getBaseType(part)
+    if base != ''
       if flg
         let type = &ft
       else
         let type = base
       endif
+      unlet base
+      break
     endif
-  endif
+  endfor
   if type == 'html'
     let type = synIDattr(synID(line("."), col("."), 1), "name")
     if type =~ '^css\w'
@@ -382,10 +426,6 @@ endfunction
 function! emmet#expandCursorExpr(expand, mode)
   let expand = a:expand
   let type = emmet#getFileType()
-  let use_pipe_for_cursor = emmet#getResource(type, 'use_pipe_for_cursor', 1)
-  if use_pipe_for_cursor
-    let expand = substitute(expand, '|', '${cursor}', 'g')
-  endif
   if expand !~ '\${cursor}'
     if a:mode == 2
       let expand = '${cursor}' . expand
@@ -419,7 +459,7 @@ function! emmet#expandAbbr(mode, abbr) range
   if a:mode == 2
     let leader = substitute(input('Tag: ', ''), '^\s*\(.*\)\s*$', '\1', 'g')
     if len(leader) == 0
-      return
+      return ''
     endif
     let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
     if leader =~ mx
@@ -511,11 +551,11 @@ function! emmet#expandAbbr(mode, abbr) range
     endif
     normal! $
     call emmet#expandAbbr(0, "")
-    return
+    return ''
   else
     let line = getline('.')
     if col('.') < len(line)
-      let line = matchstr(line, '^\(.*\%'.col('.').'c.\)')
+      let line = matchstr(line, '^\(.*\%'.col('.').'c\)')
     endif
     if a:mode == 1
       let part = matchstr(line, '\([a-zA-Z0-9:_\-\@|]\+\)$')
@@ -523,8 +563,13 @@ function! emmet#expandAbbr(mode, abbr) range
       let part = matchstr(line, '\(\S.*\)$')
       let ftype = emmet#lang#exists(type) ? type : 'html'
       let part = emmet#lang#{ftype}#findTokens(part)
+      let line = line[0: stridx(line, part) + len(part) - 1]
     endif
-    let rest = getline('.')[len(line):]
+    if col('.') == col('$')
+      let rest = ''
+    else
+      let rest = getline('.')[len(line):]
+    endif
     let str = part
     let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
     if str =~ mx
@@ -591,13 +636,25 @@ function! emmet#expandAbbr(mode, abbr) range
   if search('\$cursor\$', 'e')
     let oldselection = &selection
     let &selection = 'inclusive'
-    silent! foldopen
+    if foldclosed(line('.')) != -1
+      silent! foldopen
+    endif
     silent! exe "normal! v7h\"_s"
+    if col('.') == col('$')
+      call feedkeys('', 'n')
+    endif
     let &selection = oldselection
   endif
   if g:emmet_debug > 1
     call getchar()
   endif
+  return ''
+endfunction
+
+function! emmet#moveNextPrevItem(flag)
+  let type = emmet#getFileType()
+  let rtype = emmet#lang#exists(type) ? type : 'html'
+  return emmet#lang#{rtype}#moveNextPrevItem(a:flag)
 endfunction
 
 function! emmet#moveNextPrev(flag)
@@ -607,9 +664,12 @@ function! emmet#moveNextPrev(flag)
 endfunction
 
 function! emmet#imageSize()
+  let orgpos = emmet#util#getcurpos()
   let type = emmet#getFileType()
   let rtype = emmet#lang#exists(type) ? type : 'html'
-  return emmet#lang#{rtype}#imageSize()
+  call emmet#lang#{rtype}#imageSize()
+  silent! call setpos('.', orgpos)
+  return ''
 endfunction
 
 function! emmet#encodeImage()
@@ -621,7 +681,8 @@ endfunction
 function! emmet#toggleComment()
   let type = emmet#getFileType()
   let rtype = emmet#lang#exists(type) ? type : 'html'
-  return emmet#lang#{rtype}#toggleComment()
+  call emmet#lang#{rtype}#toggleComment()
+  return ''
 endfunction
 
 function! emmet#balanceTag(flag) range
@@ -646,7 +707,8 @@ endfunction
 function! emmet#removeTag()
   let type = emmet#getFileType()
   let rtype = emmet#lang#exists(type) ? type : 'html'
-  return emmet#lang#{rtype}#removeTag()
+  call emmet#lang#{rtype}#removeTag()
+  return ''
 endfunction
 
 function! emmet#anchorizeURL(flag)
@@ -655,7 +717,7 @@ function! emmet#anchorizeURL(flag)
   let url = matchstr(getline(pos1[0])[pos1[1]-1:], mx)
   let block = [pos1, [pos1[0], pos1[1] + len(url) - 1]]
   if !emmet#util#cursorInRegion(block)
-    return
+    return ''
   endif
 
   let mx = '.*<title[^>]*>\s*\zs\([^<]\+\)\ze\s*<\/title[^>]*>.*'
@@ -695,6 +757,7 @@ function! emmet#anchorizeURL(flag)
   let indent = substitute(getline('.'), '^\(\s*\).*', '\1', '')
   let expand = substitute(expand, "\n", "\n" . indent, 'g')
   call emmet#util#setContent(block, expand)
+  return ''
 endfunction
 
 function! emmet#codePretty() range
@@ -718,7 +781,7 @@ function! emmet#codePretty() range
   call emmet#util#setContent(block, content)
 endfunction
 
-function! emmet#ExpandWord(abbr, type, orig)
+function! emmet#expandWord(abbr, type, orig)
   let mx = '|\(\%(html\|haml\|slim\|e\|c\|fc\|xsl\|t\|\/[^ ]\+\)\s*,\{0,1}\s*\)*$'
   let str = a:abbr
   let type = a:type
@@ -734,6 +797,7 @@ function! emmet#ExpandWord(abbr, type, orig)
       let filters = ['html']
     endif
   endif
+  let str = substitute(str, '|', '${cursor}', 'g')
   let items = emmet#parseIntoTree(str, a:type).child
   let expand = ''
   for item in items
@@ -759,7 +823,7 @@ function! emmet#getSnippets(type)
   return emmet#getResource(type, 'snippets', {})
 endfunction
 
-function! emmet#CompleteTag(findstart, base)
+function! emmet#completeTag(findstart, base)
   if a:findstart
     let line = getline('.')
     let start = col('.') - 1
@@ -1295,6 +1359,13 @@ let s:emmet_settings = {
 \    },
 \    'html': {
 \        'snippets': {
+\            '!!!': "<!doctype html>",
+\            '!!!4t':  "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\" \"http://www.w3.org/TR/html4/loose.dtd\">",
+\            '!!!4s':  "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\" \"http://www.w3.org/TR/html4/strict.dtd\">",
+\            '!!!xt':  "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">",
+\            '!!!xs':  "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">",
+\            '!!!xxs': "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">",
+\            'c': "<!-- |${child} -->",
 \            'cc:ie6': "<!--[if lte IE 6]>\n\t${child}|\n<![endif]-->",
 \            'cc:ie': "<!--[if IE]>\n\t${child}|\n<![endif]-->",
 \            'cc:noie': "<!--[if !IE]><!-->\n\t${child}|\n<!--<![endif]-->",
@@ -1359,8 +1430,8 @@ let s:emmet_settings = {
 \            'bdo:l': {'dir': 'ltr'},
 \            'del': {'datetime': '${datetime}'},
 \            'ins': {'datetime': '${datetime}'},
-\            'link:css': [{'rel': 'stylesheet'}, {'type': 'text/css'}, {'href': '|style.css'}, {'media': 'all'}],
-\            'link:print': [{'rel': 'stylesheet'}, {'type': 'text/css'}, {'href': '|print.css'}, {'media': 'print'}],
+\            'link:css': [{'rel': 'stylesheet'}, g:emmet_html5 ? {} : {'type': 'text/css'}, {'href': '|style.css'}, {'media': 'all'}],
+\            'link:print': [{'rel': 'stylesheet'}, g:emmet_html5 ? {} : {'type': 'text/css'}, {'href': '|print.css'}, {'media': 'print'}],
 \            'link:favicon': [{'rel': 'shortcut icon'}, {'type': 'image/x-icon'}, {'href': '|favicon.ico'}],
 \            'link:touch': [{'rel': 'apple-touch-icon'}, {'href': '|favicon.png'}],
 \            'link:rss': [{'rel': 'alternate'}, {'type': 'application/rss+xml'}, {'title': 'RSS'}, {'href': '|rss.xml'}],
@@ -1368,9 +1439,9 @@ let s:emmet_settings = {
 \            'meta:utf': [{'http-equiv': 'Content-Type'}, {'content': 'text/html;charset=UTF-8'}],
 \            'meta:win': [{'http-equiv': 'Content-Type'}, {'content': 'text/html;charset=Win-1251'}],
 \            'meta:compat': [{'http-equiv': 'X-UA-Compatible'}, {'content': 'IE=7'}],
-\            'style': {'type': 'text/css'},
-\            'script': {'type': 'text/javascript'},
-\            'script:src': [{'type': 'text/javascript'}, {'src': ''}],
+\            'style': g:emmet_html5 ? {} : {'type': 'text/css'},
+\            'script': g:emmet_html5 ? {} : {'type': 'text/javascript'},
+\            'script:src': g:emmet_html5 ? {'src': ''} : [{'type': 'text/javascript'}, {'src': ''}],
 \            'img': [{'src': ''}, {'alt': ''}],
 \            'iframe': [{'src': ''}, {'frameborder': '0'}],
 \            'embed': [{'src': ''}, {'type': ''}],
@@ -1490,7 +1561,7 @@ let s:emmet_settings = {
 \        'empty_elements': 'area,base,basefont,br,col,frame,hr,img,input,isindex,link,meta,param,embed,keygen,command',
 \        'block_elements': 'address,applet,blockquote,button,center,dd,del,dir,div,dl,dt,fieldset,form,frameset,hr,iframe,ins,isindex,li,link,map,menu,noframes,noscript,object,ol,p,pre,script,table,tbody,td,tfoot,th,thead,tr,ul,h1,h2,h3,h4,h5,h6',
 \        'inline_elements': 'a,abbr,acronym,applet,b,basefont,bdo,big,br,button,cite,code,del,dfn,em,font,i,iframe,img,input,ins,kbd,label,map,object,q,s,samp,script,select,small,span,strike,strong,sub,sup,textarea,tt,u,var',
-\        'empty_element_suffix': ' />',
+\        'empty_element_suffix': g:emmet_html5 ? '>' : ' />',
 \    },
 \    'htmldjango': {
 \        'extends': 'html',

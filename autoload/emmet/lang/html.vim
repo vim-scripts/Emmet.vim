@@ -1,6 +1,6 @@
 let s:mx = '\([+>]\|[<^]\+\)\{-}\s*'
 \     .'\((*\)\{-}\s*'
-\       .'\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:_\!\-$]*\|{\%([^$}]\+\|\$#\|\${\w\+}\|\$\+\)*}[ \t\r\n}]*\)'
+\       .'\([@#.]\{-}[a-zA-Z\!][a-zA-Z0-9:_\!\-$]*\|{\%([^$}]\+\|\$#\|\${\w\+}\|\$\+\)*}*[ \t\r\n}]*\)'
 \       .'\('
 \         .'\%('
 \           .'\%(#{[{}a-zA-Z0-9_\-\$]\+\|#[a-zA-Z0-9_\-\$]\+\)'
@@ -8,9 +8,9 @@ let s:mx = '\([+>]\|[<^]\+\)\{-}\s*'
 \           .'\|\%(\.{[{}a-zA-Z0-9_\-\$]\+\|\.[a-zA-Z0-9_\-\$]\+\)'
 \         .'\)*'
 \       .'\)'
-\       .'\%(\({\%([^$}]\+\|\$#\|\${\w\+}\|\$\+\)*}\)\)\{0,1}'
-\         .'\%(\*\([0-9]\+\)\)\{0,1}'
-\     .'\(\%()\%(\*[0-9]\+\)\{0,1}\)*\)'
+\       .'\%(\({\%([^$}]\+\|\$#\|\${\w\+}\|\$\+\)*}\+\)\)\{0,1}'
+\         .'\%(\(@-\{0,1}[0-9]*\)\{0,1}\*\([0-9]\+\)\)\{0,1}'
+\     .'\(\%()\%(\(@-\{0,1}[0-9]*\)\{0,1}\*[0-9]\+\)\{0,1}\)*\)'
 
 function! emmet#lang#html#findTokens(str)
   let str = a:str
@@ -58,7 +58,7 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
   endif
   let abbr = rabbr
 
-  let root = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0, 'attrs_order': ['id', 'class'] }
+  let root = emmet#newNode()
   let parent = root
   let last = root
   let pos = []
@@ -71,8 +71,9 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
     let tag_name = substitute(match, s:mx, '\3', 'ig')
     let attributes = substitute(match, s:mx, '\4', 'ig')
     let value = substitute(match, s:mx, '\5', 'ig')
-    let multiplier = 0 + substitute(match, s:mx, '\6', 'ig')
-    let block_end = substitute(match, s:mx, '\7', 'ig')
+    let basevalue = substitute(match, s:mx, '\6', 'ig')
+    let multiplier = 0 + substitute(match, s:mx, '\7', 'ig')
+    let block_end = substitute(match, s:mx, '\8', 'ig')
     let important = 0
     if len(str) == 0
       break
@@ -81,7 +82,7 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
       let attributes = tag_name . attributes
       let tag_name = 'div'
     endif
-    if tag_name =~ '.!$'
+    if tag_name =~ '[^!]!$'
       let tag_name = tag_name[:-2]
       let important = 1
     endif
@@ -89,10 +90,12 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
       let attributes = tag_name . attributes
       let tag_name = 'div'
     endif
+    let basedirect = basevalue[1] == '-' ? -1 : 1
+    let basevalue = 0 + abs(basevalue[1:])
     if multiplier <= 0 | let multiplier = 1 | endif
 
     " make default node
-    let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'important': 0, 'attrs_order': ['id', 'class'] }
+    let current = emmet#newNode()
     let current.name = tag_name
 
     let current.important = important
@@ -107,15 +110,18 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
 
     " snippets
     let snippets = emmet#getResource(type, 'snippets', {})
-    if !empty(snippets) && has_key(snippets, tag_name)
-      let snippet = snippets[tag_name]
-      if use_pipe_for_cursor
-        let snippet = substitute(snippet, '|', '${cursor}', 'g')
+    if !empty(snippets)
+      let snippet_name = tag_name
+      if has_key(snippets, snippet_name)
+        let snippet = snippets[snippet_name]
+        if use_pipe_for_cursor
+          let snippet = substitute(snippet, '|', '${cursor}', 'g')
+        endif
+        let lines = split(snippet, "\n")
+        call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
+        let current.snippet = join(lines, "\n")
+        let current.name = ''
       endif
-      let lines = split(snippet, "\n")
-      call map(lines, 'substitute(v:val, "\\(    \\|\\t\\)", escape(indent, "\\\\"), "g")')
-      let current.snippet = join(lines, "\n")
-      let current.name = ''
     endif
 
     let custom_expands = emmet#getResource(type, 'custom_expands', {})
@@ -213,6 +219,8 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
     else
       let current.value = value
     endif
+    let current.basedirect = basedirect
+    let current.basevalue = basevalue
     let current.multiplier = multiplier
 
     " parse step inside/outside
@@ -274,7 +282,10 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
           let cl = last.child
           let cls = []
           for c in range(n[1:])
-            let cls += cl
+            for cc in cl
+              let cc.basevalue = c + 1
+            endfor
+            let cls += deepcopy(cl)
           endfor
           let last.child = cls
         endif
@@ -289,6 +300,7 @@ function! emmet#lang#html#parseIntoTree(abbr, type)
       echomsg "operator=".operator
       echomsg "attributes=".attributes
       echomsg "value=".value
+      echomsg "basevalue=".basevalue
       echomsg "multiplier=".multiplier
       echomsg "block_end=".block_end
       echomsg "abbr=".abbr
@@ -438,10 +450,7 @@ function! emmet#lang#html#imageSize()
   if fn =~ '^\s*$'
     return
   elseif fn !~ '^\(/\|http\)'
-    let fn = resolve(expand(fn))
-    if !filereadable(fn)
-      let fn = simplify(expand('%:h') . '/' . fn)
-    endif
+    let fn = simplify(expand('%:h') . '/' . fn)
   endif
 
   let [width, height] = emmet#util#getImageSize(fn)
@@ -485,7 +494,7 @@ function! emmet#lang#html#encodeImage()
 endfunction
 
 function! emmet#lang#html#parseTag(tag)
-  let current = { 'name': '', 'attr': {}, 'child': [], 'snippet': '', 'multiplier': 1, 'parent': {}, 'value': '', 'pos': 0, 'attrs_order': [] }
+  let current = emmet#newNode()
   let mx = '<\([a-zA-Z][a-zA-Z0-9]*\)\(\%(\s[a-zA-Z][a-zA-Z0-9]\+=\%([^"'' \t]\+\|"[^"]\{-}"\|''[^'']\{-}''\)\s*\)*\)\(/\{0,1}\)>'
   let match = matchstr(a:tag, mx)
   let current.name = substitute(match, mx, '\1', 'i')
@@ -507,8 +516,8 @@ function! emmet#lang#html#parseTag(tag)
 endfunction
 
 function! emmet#lang#html#toggleComment()
-  let orgpos = getpos('.')
-  let curpos = getpos('.')
+  let orgpos = emmet#util#getcurpos()
+  let curpos = emmet#util#getcurpos()
   let mx = '<\%#[^>]*>'
   while 1
     let block = emmet#util#searchRegion('<!--', '-->')
@@ -526,7 +535,7 @@ function! emmet#lang#html#toggleComment()
       if pos1[0] == 0 && pos1[1] == 0
         return
       endif
-      let curpos = getpos('.')
+      let curpos = emmet#util#getcurpos()
       continue
     endif
     let pos1 = block[0]
@@ -535,7 +544,7 @@ function! emmet#lang#html#toggleComment()
     let tag_name = matchstr(content, '^<\zs/\{0,1}[^ \r\n>]\+')
     if tag_name[0] == '/'
       call setpos('.', [0, pos1[0], pos1[1], 0])
-      let pos2 = searchpairpos('<'. tag_name[1:] . '>', '', '</' . tag_name[1:] . '>', 'bnW')
+      let pos2 = searchpairpos('<'. tag_name[1:] . '\>[^>]*>', '', '</' . tag_name[1:] . '>', 'bnW')
       let pos1 = searchpos('>', 'cneW')
       let block = [pos2, pos1]
     elseif tag_name =~ '/$'
@@ -550,10 +559,14 @@ function! emmet#lang#html#toggleComment()
       endif
     else
       call setpos('.', [0, pos2[0], pos2[1], 0])
-      let pos2 = searchpairpos('<'. tag_name . '>', '', '</' . tag_name . '>', 'nW')
-      call setpos('.', [0, pos2[0], pos2[1], 0])
-      let pos2 = searchpos('>', 'neW')
-      let block = [pos1, pos2]
+      let pos3 = searchpairpos('<'. tag_name . '\>[^>]*>', '', '</' . tag_name . '>', 'nW')
+      if pos3 == [0, 0]
+        let block = [pos1, pos2]
+      else
+        call setpos('.', [0, pos3[0], pos3[1], 0])
+        let pos2 = searchpos('>', 'neW')
+        let block = [pos1, pos2]
+      endif
     endif
     if !emmet#util#regionIsValid(block)
       silent! call setpos('.', orgpos)
@@ -573,7 +586,7 @@ function! emmet#lang#html#balanceTag(flag) range
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
-    let curpos = getpos('.')
+    let curpos = emmet#util#getcurpos()
   endif
   let settings = emmet#getSettings()
 
@@ -634,6 +647,15 @@ function! emmet#lang#html#balanceTag(flag) range
   endif
 endfunction
 
+function! emmet#lang#html#moveNextPrevItem(flag)
+  silent! exe "normal \<esc>"
+  let mx = '\%([0-9a-zA-Z-:]\+\%(="[^"]*"\|=''[^'']*''\|[^ ''">\]]*\)\{0,1}\)'
+  let pos = searchpos('\s'.mx.'\zs', '')
+  if pos != [0,0]
+    call feedkeys('v?\s\zs'.mx."\<cr>", '')
+  endif
+endfunction
+
 function! emmet#lang#html#moveNextPrev(flag)
   let pos = search('\%(</\w\+\)\@<!\zs><\/\|\(""\)\|^\(\s*\)$', a:flag ? 'Wpb' : 'Wp')
   if pos == 3
@@ -645,7 +667,7 @@ function! emmet#lang#html#moveNextPrev(flag)
 endfunction
 
 function! emmet#lang#html#splitJoinTag()
-  let curpos = getpos('.')
+  let curpos = emmet#util#getcurpos()
   while 1
     let mx = '<\(/\{0,1}[a-zA-Z][a-zA-Z0-9:_\-]*\)[^>]*>'
     let pos1 = searchpos(mx, 'bcnW')
@@ -685,7 +707,7 @@ function! emmet#lang#html#splitJoinTag()
 endfunction
 
 function! emmet#lang#html#removeTag()
-  let curpos = getpos('.')
+  let curpos = emmet#util#getcurpos()
   while 1
     let mx = '<\(/\{0,1}[a-zA-Z][a-zA-Z0-9:_\-]*\)[^>]*>'
     let pos1 = searchpos(mx, 'bcnW')

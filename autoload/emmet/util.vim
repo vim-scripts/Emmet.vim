@@ -93,7 +93,7 @@ endfunction
 "   this function return 0 or 1
 function! emmet#util#cursorInRegion(region)
   if !emmet#util#regionIsValid(a:region) | return 0 | endif
-  let cur = getpos('.')[1:2]
+  let cur = emmet#util#getcurpos()[1:2]
   return emmet#util#pointInRegion(cur, a:region)
 endfunction
 
@@ -107,7 +107,12 @@ endfunction
 " search_region : make region from pattern which is composing start/end
 "   this function return array of position
 function! emmet#util#searchRegion(start, end)
-  return [searchpairpos(a:start, '', a:end, 'bcnW'), searchpairpos(a:start, '\%#', a:end, 'nW')]
+  let b = searchpairpos(a:start, '', a:end, 'bcnW')
+  if b == [0, 0]
+    return [searchpairpos(a:start, '', a:end, 'bnW'), searchpairpos(a:start, '\%#', a:end, 'nW')]
+  else
+    return [b, searchpairpos(a:start, '', a:end. '', 'nW')]
+  endif
 endfunction
 
 " get_content : get content in region
@@ -206,6 +211,23 @@ function! emmet#util#getImageSize(fn)
   if filereadable(fn)
     let hex = substitute(system('xxd -p "'.fn.'"'), '\n', '', 'g')
   else
+    if fn !~ '^\w\+://'
+      let path = fnamemodify(expand('%'), ':p:gs?\\?/?')
+      if has('win32') || has('win64') | 
+        let path = tolower(path)
+      endif
+      for k in keys(g:emmet_docroot)
+        let root = fnamemodify(k, ':p:gs?\\?/?')
+        if has('win32') || has('win64') | 
+          let root = tolower(root)
+        endif
+        if stridx(path, root) == 0
+          let v = g:emmet_docroot[k]
+          let fn = (len(v) == 0 ? k : v) . fn
+          break
+        endif
+      endfor
+    endif
     let hex = substitute(system(g:emmet_curl_command.' "'.fn.'" | xxd -p'), '\n', '', 'g')
   endif
 
@@ -293,4 +315,12 @@ function! emmet#util#cache(name, ...)
 	return join(readfile(file), "\n")
   endif
   call writefile(split(content, "\n"), file)
+endfunction
+
+function! emmet#util#getcurpos()
+  let pos = getpos('.')
+  if mode(0) == 'i' && pos[2] > 0
+    let pos[2] -=1
+  endif
+  return pos
 endfunction
