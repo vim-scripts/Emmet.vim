@@ -15,6 +15,7 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
   let itemno = a:itemno
   let indent = emmet#getIndentation(type)
   let dollar_expr = emmet#getResource(type, 'dollar_expr', 1)
+  let attribute_style = emmet#getResource('haml', 'attribute_style', 'hash')
   let str = ""
 
   let comment_indent = ''
@@ -30,26 +31,48 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
       if !has_key(current.attr, attr)
         continue
       endif
-      let val = current.attr[attr]
-      if dollar_expr
-        while val =~ '\$\([^#{]\|$\)'
-          let val = substitute(val, '\(\$\+\)\([^{]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
-        endwhile
-        let attr = substitute(attr, '\$$', itemno+1, '')
-      endif
-      let valtmp = substitute(val, '\${cursor}', '', '')
-      if attr == 'id' && len(valtmp) > 0
-        let str .= '#' . val
-      elseif attr == 'class' && len(valtmp) > 0
-        let str .= '.' . substitute(val, ' ', '.', 'g')
+      let Val = current.attr[attr]
+      if type(Val) == 2 && Val == function('emmet#types#true')
+        if attribute_style == 'hash'
+          let tmp .= ' :' . attr . ' => true'
+        elseif attribute_style == 'html'
+          let tmp .= attr . '=true'
+        end
       else
-        if len(tmp) > 0 | let tmp .= ',' | endif
-        let val = substitute(val, '\${cursor}', '', '')
-        let tmp .= ' :' . attr . ' => "' . val . '"'
+        if dollar_expr
+          while Val =~ '\$\([^#{]\|$\)'
+            let Val = substitute(Val, '\(\$\+\)\([^{]\|$\)', '\=printf("%0".len(submatch(1))."d", itemno+1).submatch(2)', 'g')
+          endwhile
+          let attr = substitute(attr, '\$$', itemno+1, '')
+        endif
+        let valtmp = substitute(Val, '\${cursor}', '', '')
+        if attr == 'id' && len(valtmp) > 0
+          let str .= '#' . Val
+        elseif attr == 'class' && len(valtmp) > 0
+          let str .= '.' . substitute(Val, ' ', '.', 'g')
+        else
+          if len(tmp) > 0 
+            if attribute_style == 'hash'
+              let tmp .= ',' 
+            elseif attribute_style == 'html'
+              let tmp .= ' ' 
+            endif
+          endif
+          let Val = substitute(Val, '\${cursor}', '', '')
+          if attribute_style == 'hash'
+            let tmp .= ' :' . attr . ' => "' . Val . '"'
+          elseif attribute_style == 'html'
+            let tmp .= attr . '="' . Val . '"'
+          end
+        endif
       endif
     endfor
     if len(tmp)
-      let str .= '{' . tmp . ' }'
+      if attribute_style == 'hash'
+        let str .= '{' . tmp . ' }'
+      elseif attribute_style == 'html'
+        let str .= '(' . tmp . ')'
+      end
     endif
     if stridx(','.settings.html.empty_elements.',', ','.current_name.',') != -1 && len(current.value) == 0
       let str .= "/"
