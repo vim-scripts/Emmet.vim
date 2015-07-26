@@ -1,14 +1,18 @@
-function! emmet#lang#css#findTokens(str)
+function! emmet#lang#css#findTokens(str) abort
+  let tmp = substitute(substitute(a:str, '^.*[;{]\s*', '', ''), '}\s*$', '', '')
+  if tmp =~ '/' && tmp =~ '^[a-zA-Z0-9/_.]\+$'
+    " maybe path or something
+    return ''
+  endif
   return substitute(substitute(a:str, '^.*[;{]\s*', '', ''), '}\s*$', '', '')
 endfunction
 
-function! emmet#lang#css#parseIntoTree(abbr, type)
+function! emmet#lang#css#parseIntoTree(abbr, type) abort
   let abbr = a:abbr
   let type = a:type
   let prefix = 0
   let value = ''
 
-  let settings = emmet#getSettings()
   let indent = emmet#getIndentation(type)
   let aliases = emmet#getResource(type, 'aliases', {})
   let snippets = emmet#getResource(type, 'snippets', {})
@@ -18,19 +22,19 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
 
   " emmet
   let tokens = split(abbr, '+\ze[^+)!]')
-  let block = emmet#util#searchRegion("{", "}")
-  if abbr !~ '^@' && emmet#getBaseType(type) == 'css' && type != 'sass' && block[0] == [0,0] && block[1] == [0,0]
+  let block = emmet#util#searchRegion('{', '}')
+  if abbr !~# '^@' && emmet#getBaseType(type) ==# 'css' && type !=# 'sass' && block[0] ==# [0,0] && block[1] ==# [0,0]
     let current = emmet#newNode()
-    let current.snippet = abbr . " {\n" . indent . "${cursor}\n}"
+    let current.snippet = substitute(abbr, '\s\+$', '', '') . " {\n" . indent . "${cursor}\n}"
     let current.name = ''
     call add(root.child, deepcopy(current))
   else
     for n in range(len(tokens))
       let token = tokens[n]
-      let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+[pe]\{0,1}-\{0,1}\|-auto\)*\)$')
+      let prop = matchlist(token, '^\(-\{0,1}[a-zA-Z]\+\|[a-zA-Z0-9]\++\{0,1}\|([a-zA-Z0-9]\++\{0,1})\)\(\%([0-9.-]\+\%(p\|e\|em\|re\|rem\|%\)\{0,1}-\{0,1}\|-auto\)*\)$')
       if len(prop)
         let token = substitute(prop[1], '^(\(.*\))', '\1', '')
-        if token =~ '^-'
+        if token =~# '^-'
           let prefix = 1
           let token = token[1:]
         endif
@@ -39,18 +43,26 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
           if len(value) > 0
             let value .= ' '
           endif
-          if token =~ '^[z]'
+          if token =~# '^[z]'
             " TODO
             let value .= substitute(v, '[^0-9.]*$', '', '')
-          elseif v =~ 'p$'
+          elseif v =~# 'p$'
             let value .= substitute(v, 'p$', '%', '')
-          elseif v =~ 'e$'
-            let value .= substitute(v, 'e$', 'em', '')
-          elseif v =~ '\.'
-            let value .= v . 'em'
-          elseif v == 'auto'
+          elseif v =~# '%$'
             let value .= v
-          elseif v == '0'
+          elseif v =~# 'e$'
+            let value .= substitute(v, 'e$', 'em', '')
+          elseif v =~# 'em$'
+            let value .= v
+          elseif v =~# 're$'
+            let value .= substitute(v, 're$', 'rem', '')
+          elseif v =~# 'rem$'
+            let value .= v
+          elseif v =~# '\.'
+            let value .= v . 'em'
+          elseif v ==# 'auto'
+            let value .= v
+          elseif v ==# '0'
             let value .= '0'
           else
             let value .= v . 'px'
@@ -59,7 +71,7 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
       endif
 
       let tag_name = token
-      if tag_name =~ '.!$'
+      if tag_name =~# '.!$'
         let tag_name = tag_name[:-2]
         let important = 1
       else
@@ -89,6 +101,10 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
             if len(vv) == 0
               let pat = '^' . join(split(tag_name, '\zs'), '[^:]\{-}')
               let vv = filter(sort(keys(snippets)), 'snippets[v:val] =~ pat')
+              if len(vv) == 0
+                let pat = '^' . join(split(tag_name, '\zs'), '.\{-}')
+                let vv = filter(sort(keys(snippets)), 'snippets[v:val] =~ pat')
+              endif
             endif
             let minl = -1
             for vk in vv
@@ -147,7 +163,7 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
         call add(root.child, deepcopy(current))
         let current.snippet = snippet
         call add(root.child, current)
-      elseif token =~ '^c#\([0-9a-fA-F]\{3}\|[0-9a-fA-F]\{6}\)\(\.[0-9]\+\)\?'
+      elseif token =~# '^c#\([0-9a-fA-F]\{3}\|[0-9a-fA-F]\{6}\)\(\.[0-9]\+\)\?'
         let cs = split(token, '\.')
         let current.name = ''
         let [r,g,b] = [0,0,0]
@@ -168,7 +184,7 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
           let current.snippet = printf('color:rgb(%d, %d, %d, %s);', r, g, b, string(str2float('0.'.cs[1])))
         endif
         call add(root.child, current)
-      elseif token =~ '^c#'
+      elseif token =~# '^c#'
         let current.name = ''
         let current.snippet = 'color:\${cursor};'
         call add(root.child, current)
@@ -180,21 +196,24 @@ function! emmet#lang#css#parseIntoTree(abbr, type)
   return root
 endfunction
 
-function! emmet#lang#css#toString(settings, current, type, inline, filters, itemno, indent)
+function! emmet#lang#css#toString(settings, current, type, inline, filters, itemno, indent) abort
   let current = a:current
   let value = current.value[1:-2]
-  if emmet#useFilter(a:filters, 'fc')
-    let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1: \2', 'g')
-  else
-    let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1:\2', 'g')
-  endif
-  if current.important
-    let value = substitute(value, ';', ' !important;', '')
+  let tmp = substitute(value, '\${cursor}', '', 'g')
+  if tmp !~ '.*{[ \t\r\n]*}$'
+    if emmet#useFilter(a:filters, 'fc')
+      let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1: \2', 'g')
+    else
+      let value = substitute(value, '\([^:]\+\):\([^;]*\)', '\1:\2', 'g')
+    endif
+    if current.important
+      let value = substitute(value, ';', ' !important;', '')
+    endif
   endif
   return value
 endfunction
 
-function! emmet#lang#css#imageSize()
+function! emmet#lang#css#imageSize() abort
   let img_region = emmet#util#searchRegion('{', '}')
   if !emmet#util#regionIsValid(img_region) || !emmet#util#cursorInRegion(img_region)
     return
@@ -202,9 +221,9 @@ function! emmet#lang#css#imageSize()
   let content = emmet#util#getContent(img_region)
   let fn = matchstr(content, '\<url(\zs[^)]\+\ze)')
   let fn = substitute(fn, '[''" \t]', '', 'g')
-  if fn =~ '^\s*$'
+  if fn =~# '^\s*$'
     return
-  elseif fn !~ '^\(/\|http\)'
+  elseif fn !~# '^\(/\|http\)'
     let fn = simplify(expand('%:h') . '/' . fn)
   endif
   let [width, height] = emmet#util#getImageSize(fn)
@@ -212,12 +231,12 @@ function! emmet#lang#css#imageSize()
     return
   endif
   let indent = emmet#getIndentation('css')
-  if content =~ '.*\<width\s*:[^;]*;.*'
+  if content =~# '.*\<width\s*:[^;]*;.*'
     let content = substitute(content, '\<width\s*:[^;]*;', 'width: ' . width . 'px;', '')
   else
     let content = substitute(content, '}', indent . 'width: ' . width . "px;\n}", '')
   endif
-  if content =~ '.*\<height\s*:[^;]*;.*'
+  if content =~# '.*\<height\s*:[^;]*;.*'
     let content = substitute(content, '\<height\s*:[^;]*;', 'height: ' . height . 'px;', '')
   else
     let content = substitute(content, '}', indent . 'height: ' . height . "px;\n}", '')
@@ -225,17 +244,17 @@ function! emmet#lang#css#imageSize()
   call emmet#util#setContent(img_region, content)
 endfunction
 
-function! emmet#lang#css#encodeImage()
+function! emmet#lang#css#encodeImage() abort
 endfunction
 
-function! emmet#lang#css#parseTag(tag)
+function! emmet#lang#css#parseTag(tag) abort
   return {}
 endfunction
 
-function! emmet#lang#css#toggleComment()
+function! emmet#lang#css#toggleComment() abort
   let line = getline('.')
   let mx = '^\(\s*\)/\*\s*\(.*\)\s*\*/\s*$'
-  if line =~ '{\s*$'
+  if line =~# '{\s*$'
     let block = emmet#util#searchRegion('/\*', '\*/\zs')
     if emmet#util#regionIsValid(block)
       let content = emmet#util#getContent(block)
@@ -248,7 +267,7 @@ function! emmet#lang#css#toggleComment()
       endif
     endif
   else
-    if line =~ mx
+    if line =~# mx
       let space = substitute(matchstr(line, mx), mx, '\1', '')
       let line = substitute(matchstr(line, mx), mx, '\2', '')
       let line = space . substitute(line, '^\s*\|\s*$', '\1', 'g')
@@ -260,7 +279,7 @@ function! emmet#lang#css#toggleComment()
   endif
 endfunction
 
-function! emmet#lang#css#balanceTag(flag) range
+function! emmet#lang#css#balanceTag(flag) range abort
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
   else
@@ -278,7 +297,7 @@ function! emmet#lang#css#balanceTag(flag) range
   else
     if a:flag > 0
       let content = emmet#util#getContent(block)
-      if content !~ '^{.*}$'
+      if content !~# '^{.*}$'
         let block = emmet#util#searchRegion('{', '}')
         if emmet#util#regionIsValid(block)
           call emmet#util#selectRegion(block)
@@ -298,17 +317,17 @@ function! emmet#lang#css#balanceTag(flag) range
     endif
   endif
   if a:flag == -2 || a:flag == 2
-    silent! exe "normal! gv"
+    silent! exe 'normal! gv'
   else
     call setpos('.', curpos)
   endif
 endfunction
 
-function! emmet#lang#css#moveNextPrevItem(flag)
+function! emmet#lang#css#moveNextPrevItem(flag) abort
   return emmet#lang#css#moveNextPrev(a:flag)
 endfunction
 
-function! emmet#lang#css#moveNextPrev(flag)
+function! emmet#lang#css#moveNextPrev(flag) abort
   let pos = search('""\|()\|\(:\s*\zs$\)', a:flag ? 'Wbp' : 'Wp')
   if pos == 2
     startinsert!
@@ -318,10 +337,10 @@ function! emmet#lang#css#moveNextPrev(flag)
   endif
 endfunction
 
-function! emmet#lang#css#splitJoinTag()
+function! emmet#lang#css#splitJoinTag() abort
   " nothing to do
 endfunction
 
-function! emmet#lang#css#removeTag()
+function! emmet#lang#css#removeTag() abort
   " nothing to do
 endfunction

@@ -1,12 +1,12 @@
-function! emmet#lang#haml#findTokens(str) abort
+function! emmet#lang#jade#findTokens(str) abort
   return emmet#lang#html#findTokens(a:str)
 endfunction
 
-function! emmet#lang#haml#parseIntoTree(abbr, type) abort
+function! emmet#lang#jade#parseIntoTree(abbr, type) abort
   return emmet#lang#html#parseIntoTree(a:abbr, a:type)
 endfunction
 
-function! emmet#lang#haml#toString(settings, current, type, inline, filters, itemno, indent) abort
+function! emmet#lang#jade#toString(settings, current, type, inline, filters, itemno, indent) abort
   let settings = a:settings
   let current = a:current
   let type = a:type
@@ -15,7 +15,7 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
   let itemno = a:itemno
   let indent = emmet#getIndentation(type)
   let dollar_expr = emmet#getResource(type, 'dollar_expr', 1)
-  let attribute_style = emmet#getResource('haml', 'attribute_style', 'hash')
+  let attribute_style = emmet#getResource('jade', 'attribute_style', 'hash')
   let str = ''
 
   let current_name = current.name
@@ -23,7 +23,7 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
     let current_name = substitute(current.name, '\$$', itemno+1, '')
   endif
   if len(current.name) > 0
-    let str .= '%' . current_name
+    let str .= '' . current_name
     let tmp = ''
     for attr in emmet#util#unique(current.attrs_order + keys(current.attr))
       if !has_key(current.attr, attr)
@@ -32,7 +32,7 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
       let Val = current.attr[attr]
       if type(Val) == 2 && Val == function('emmet#types#true')
         if attribute_style ==# 'hash'
-          let tmp .= ' :' . attr . ' => true'
+          let tmp .= ' ' . attr . ' = true'
         elseif attribute_style ==# 'html'
           let tmp .= attr . '=true'
         end
@@ -49,16 +49,16 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
         elseif attr ==# 'class' && len(valtmp) > 0
           let str .= '.' . substitute(Val, ' ', '.', 'g')
         else
-          if len(tmp) > 0 
+          if len(tmp) > 0
             if attribute_style ==# 'hash'
-              let tmp .= ',' 
+              let tmp .= ', '
             elseif attribute_style ==# 'html'
-              let tmp .= ' ' 
+              let tmp .= ' '
             endif
           endif
           let Val = substitute(Val, '\${cursor}', '', '')
           if attribute_style ==# 'hash'
-            let tmp .= ' :' . attr . ' => "' . Val . '"'
+            let tmp .= '' . attr . '="' . Val . '"'
           elseif attribute_style ==# 'html'
             let tmp .= attr . '="' . Val . '"'
           end
@@ -67,13 +67,10 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
     endfor
     if len(tmp)
       if attribute_style ==# 'hash'
-        let str .= '{' . tmp . ' }'
+        let str .= '(' . tmp . ')'
       elseif attribute_style ==# 'html'
         let str .= '(' . tmp . ')'
       end
-    endif
-    if stridx(','.settings.html.empty_elements.',', ','.current_name.',') != -1 && len(current.value) == 0
-      let str .= '/'
     endif
 
     let inner = ''
@@ -131,9 +128,9 @@ function! emmet#lang#haml#toString(settings, current, type, inline, filters, ite
   return str
 endfunction
 
-function! emmet#lang#haml#imageSize() abort
+function! emmet#lang#jade#imageSize() abort
   let line = getline('.')
-  let current = emmet#lang#haml#parseTag(line)
+  let current = emmet#lang#jade#parseTag(line)
   if empty(current) || !has_key(current.attr, 'src')
     return
   endif
@@ -151,15 +148,15 @@ function! emmet#lang#haml#imageSize() abort
   let current.attr.width = width
   let current.attr.height = height
   let current.attrs_order += ['width', 'height']
-  let haml = emmet#toString(current, 'haml', 1)
-  let haml = substitute(haml, '\${cursor}', '', '')
-  call setline('.', substitute(matchstr(line, '^\s*') . haml, "\n", '', 'g'))
+  let jade = emmet#toString(current, 'jade', 1)
+  let jade = substitute(jade, '\${cursor}', '', '')
+  call setline('.', substitute(matchstr(line, '^\s*') . jade, "\n", '', 'g'))
 endfunction
 
-function! emmet#lang#haml#encodeImage() abort
+function! emmet#lang#jade#encodeImage() abort
 endfunction
 
-function! emmet#lang#haml#parseTag(tag) abort
+function! emmet#lang#jade#parseTag(tag) abort
   let current = emmet#newNode()
   let mx = '%\([a-zA-Z][a-zA-Z0-9]*\)\s*\%({\(.*\)}\)'
   let match = matchstr(a:tag, mx)
@@ -181,7 +178,7 @@ function! emmet#lang#haml#parseTag(tag) abort
   return current
 endfunction
 
-function! emmet#lang#haml#toggleComment() abort
+function! emmet#lang#jade#toggleComment() abort
   let line = getline('.')
   let space = matchstr(line, '^\s*')
   if line =~# '^\s*-#'
@@ -191,7 +188,7 @@ function! emmet#lang#haml#toggleComment() abort
   endif
 endfunction
 
-function! emmet#lang#haml#balanceTag(flag) range abort
+function! emmet#lang#jade#balanceTag(flag) range abort
   let block = emmet#util#getVisualBlock()
   if a:flag == -2 || a:flag == 2
     let curpos = [0, line("'<"), col("'<"), 0]
@@ -256,11 +253,11 @@ function! emmet#lang#haml#balanceTag(flag) range abort
   endif
 endfunction
 
-function! emmet#lang#haml#moveNextPrevItem(flag) abort
-  return emmet#lang#haml#moveNextPrev(a:flag)
+function! emmet#lang#jade#moveNextPrevItem(flag) abort
+  return emmet#lang#jade#moveNextPrev(a:flag)
 endfunction
 
-function! emmet#lang#haml#moveNextPrev(flag) abort
+function! emmet#lang#jade#moveNextPrev(flag) abort
   let pos = search('""', a:flag ? 'Wb' : 'W')
   if pos != 0
     silent! normal! l
@@ -268,7 +265,7 @@ function! emmet#lang#haml#moveNextPrev(flag) abort
   endif
 endfunction
 
-function! emmet#lang#haml#splitJoinTag() abort
+function! emmet#lang#jade#splitJoinTag() abort
   let n = line('.')
   let sml = len(matchstr(getline(n), '^\s*%[a-z]'))
   while n > 0
@@ -308,7 +305,7 @@ function! emmet#lang#haml#splitJoinTag() abort
   endwhile
 endfunction
 
-function! emmet#lang#haml#removeTag() abort
+function! emmet#lang#jade#removeTag() abort
   let n = line('.')
   let ml = 0
   while n > 0
